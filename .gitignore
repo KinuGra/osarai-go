@@ -1,0 +1,19 @@
+# Go
+*.exe
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# App data
+*.db
+*.db-wal
+*.db-shm
+
+# Environment
+.env*
