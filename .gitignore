@@ -3,6 +3,9 @@
 *.test
 *.out
 
+# Binary
+/osarai
+
 # IDE
 .idea/
 .vscode/

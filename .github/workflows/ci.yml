@@ -1,0 +1,21 @@
+name: CI # GitHub Actions タブに表示される名前
+on: [push, pull_request] # push と PR の両方で実行
+jobs:
+  test: # ジョブ名（1つのジョブ = 1つの仮想マシン）
+    runs-on: ubuntu-latest # GitHub が提供する Ubuntu マシンで実行
+    steps:
+      - uses: actions/checkout@v4 # ① リポのコードを CI マシンにクローン
+        #    これがないとコードがない状態で始まる
+      - uses: actions/setup-go@v5 # ② Go をインストール
+        with:
+          go-version: "1.25" #    プロジェクトの Go バージョンに合わせる
+          #    go.mod の go ディレクティブと一致させる
+      - run: go test ./... # ③ 全パッケージのユニットテストを実行
+        #    ./... = 再帰的に全サブディレクトリ
+        #    1つでも FAIL → ジョブ失敗 → PR に ❌
+      - run: go vet ./... # ④ Go 標準の静的解析
+        #    golangci-lint と一部重複するが高速なので残す
+      - name: golangci-lint # ⑤ リンター実行
+        uses: golangci/golangci-lint-action@v6
+        #    公式 Action。golangci-lint のインストール不要
+        #    .golangci-lint.yml を自動で読み込む
