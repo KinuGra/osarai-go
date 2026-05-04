@@ -1,0 +1,6 @@
+linters:
+  enable:
+    - gofmt # コードフォーマットチェック
+    - govet # コンパイラが見つけない怪しいパターン検出
+    - errcheck # error を _ で握り潰していないか検出
+    - staticcheck # 高度な静的解析（非推奨API、到達不能コード等）
