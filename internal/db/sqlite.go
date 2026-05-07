@@ -160,7 +160,7 @@ func createTables(tx *sql.Tx) error {
 			session_id     INTEGER  NOT NULL REFERENCES sessions(id),
 			commit_id      INTEGER  REFERENCES commits(id),
 			title          TEXT     NOT NULL,
-			category       TEXT     NOT NULL CHECK(category IN ('design','language','framework')),
+			category       TEXT     NOT NULL,
 			question_type  TEXT     NOT NULL CHECK(question_type IN ('choice','written')),
 			body           TEXT     NOT NULL,
 			choices        TEXT,
