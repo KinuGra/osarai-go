@@ -82,10 +82,11 @@ func TestCheckConstraints(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "commit hash 40文字以外は拒否",
+			// SHA-1(40文字) も SHA-256(64文字) も受け入れる（将来の移行を考慮）
+			name:    "commit hash SHA-256(64文字)を許可",
 			query:   `INSERT INTO commits (repository_id, hash, message, author_name, author_email, committed_at) VALUES (?, ?, ?, ?, ?, ?)`,
-			args:    []interface{}{repoID, "short", "m", "n", "e", "2024-01-01T00:00:00Z"},
-			wantErr: true,
+			args:    []interface{}{repoID, "0000000000000000000000000000000000000000000000000000000000000000", "m", "n", "e", "2024-01-01T00:00:00Z"},
+			wantErr: false,
 		},
 		{
 			name:    "session.mode が check/recall 以外は拒否",

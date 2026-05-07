@@ -132,7 +132,7 @@ func createTables(tx *sql.Tx) error {
 		`CREATE TABLE IF NOT EXISTS commits (
 			id            INTEGER  PRIMARY KEY AUTOINCREMENT,
 			repository_id INTEGER  NOT NULL REFERENCES repositories(id),
-			hash          TEXT     NOT NULL CHECK(length(hash) = 40),
+			hash          TEXT     NOT NULL,
 			message       TEXT     NOT NULL,
 			author_name   TEXT     NOT NULL,
 			author_email  TEXT     NOT NULL,
