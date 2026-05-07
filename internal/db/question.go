@@ -52,7 +52,7 @@ func (s *questionStore) FindBySessionID(sessionID int64) ([]Question, error) {
 			&q.ID, &q.SessionID, &commitID, &q.Title, &q.Category, &q.QuestionType,
 			&q.Body, &q.Choices, &q.CorrectAnswer, &diffContext, &q.SortOrder, &createdAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("question scan: %w", err)
 		}
 		if commitID.Valid {
 			q.CommitID = &commitID.Int64
@@ -60,9 +60,11 @@ func (s *questionStore) FindBySessionID(sessionID int64) ([]Question, error) {
 		if diffContext.Valid {
 			q.DiffContext = &diffContext.String
 		}
-		if t, err := parseTime(createdAt); err == nil {
-			q.CreatedAt = t
+		t, err := parseTime(createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("question parse created_at: %w", err)
 		}
+		q.CreatedAt = t
 		qs = append(qs, q)
 	}
 	return qs, rows.Err()

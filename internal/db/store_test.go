@@ -202,15 +202,13 @@ func TestQuestionAllCategoriesAccepted(t *testing.T) {
 		})
 	}
 
-	// カテゴリのバリデーションはアプリケーション層の責務
-	// DB 制約は外しているため、未知のカテゴリも DB レベルでは受け入れる
-	t.Run("unknown category accepted at DB level", func(t *testing.T) {
+	t.Run("invalid category rejected", func(t *testing.T) {
 		q := &Question{
 			SessionID: sess.ID, Title: "t", Category: "performance",
 			QuestionType: "choice", Body: "b", CorrectAnswer: "A",
 		}
-		if err := store.Save(q); err != nil {
-			t.Errorf("DB should accept unknown category (validation is app-layer): %v", err)
+		if err := store.Save(q); err == nil {
+			t.Error("invalid category should be rejected by CHECK constraint")
 		}
 	})
 }

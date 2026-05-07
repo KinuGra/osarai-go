@@ -75,7 +75,6 @@ func (s *answerStore) FindSaved() ([]Answer, error) {
 	return scanAnswers(rows)
 }
 
-// scanAnswer は sql.Row から Answer を読み取る。
 func scanAnswer(row *sql.Row) (*Answer, error) {
 	var a Answer
 	var isCorrect sql.NullInt64
@@ -104,9 +103,11 @@ func scanAnswer(row *sql.Row) (*Answer, error) {
 	if exportPath.Valid {
 		a.ExportPath = &exportPath.String
 	}
-	if t, err := parseTime(createdAt); err == nil {
-		a.CreatedAt = t
+	t, err := parseTime(createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("answer parse created_at: %w", err)
 	}
+	a.CreatedAt = t
 	return &a, nil
 }
 
@@ -122,7 +123,7 @@ func scanAnswers(rows *sql.Rows) ([]Answer, error) {
 			&a.ID, &a.QuestionID, &a.UserAnswer, &isCorrect, &aiScore,
 			&aiScoreLabel, &aiExplanation, &a.GradeStatus, &a.Saved, &exportPath, &createdAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("answer scan: %w", err)
 		}
 		if isCorrect.Valid {
 			b := isCorrect.Int64 != 0
@@ -140,15 +141,16 @@ func scanAnswers(rows *sql.Rows) ([]Answer, error) {
 		if exportPath.Valid {
 			a.ExportPath = &exportPath.String
 		}
-		if t, err := parseTime(createdAt); err == nil {
-			a.CreatedAt = t
+		t, err := parseTime(createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("answer parse created_at: %w", err)
 		}
+		a.CreatedAt = t
 		answers = append(answers, a)
 	}
 	return answers, rows.Err()
 }
 
-// boolToNullInt は *bool を SQLite の INTEGER (0/1/NULL) に変換する。
 func boolToNullInt(b *bool) interface{} {
 	if b == nil {
 		return nil

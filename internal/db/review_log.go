@@ -51,11 +51,13 @@ func (s *reviewLogStore) FindByAnswerID(answerID int64) ([]ReviewLog, error) {
 			&l.EaseFactorBefore, &l.EaseFactorAfter,
 			&l.IntervalBefore, &l.IntervalAfter, &createdAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("review log scan: %w", err)
 		}
-		if t, err := parseTime(createdAt); err == nil {
-			l.CreatedAt = t
+		t, err := parseTime(createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("review log parse created_at: %w", err)
 		}
+		l.CreatedAt = t
 		logs = append(logs, l)
 	}
 	return logs, rows.Err()

@@ -66,14 +66,20 @@ func scanReviews(rows *sql.Rows) ([]Review, error) {
 			&r.ID, &r.AnswerID, &r.EaseFactor, &r.IntervalDays,
 			&r.Repetitions, &nextReviewAt, &updatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("review scan: %w", err)
 		}
-		if t, err := parseTime(nextReviewAt); err == nil {
-			r.NextReviewAt = t
+		t, err := parseTime(nextReviewAt)
+		if err != nil {
+			return nil, fmt.Errorf("review parse next_review_at: %w", err)
 		}
-		if t, err := parseTime(updatedAt); err == nil {
-			r.UpdatedAt = t
+		r.NextReviewAt = t
+
+		t, err = parseTime(updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("review parse updated_at: %w", err)
 		}
+		r.UpdatedAt = t
+
 		reviews = append(reviews, r)
 	}
 	return reviews, rows.Err()
