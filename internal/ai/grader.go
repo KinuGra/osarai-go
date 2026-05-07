@@ -10,13 +10,15 @@ type GradeRequest struct {
 }
 
 // GradeResult は AI による採点結果。
+// LLM レスポンスの JSON を json.Unmarshal するため、snake_case フィールドには
+// タグが必須（タグなしだと is_correct → IsCorrect のマッピングが失敗する）。
 // IsCorrect と Score はポインタ型で、採点不能時（記述式 API 失敗など）は nil になる。
 type GradeResult struct {
-	IsCorrect   *bool    // nil = 採点不能
-	Score       *float64 // 0.0〜10.0。nil = 採点不能
-	ScoreLabel  string   // 表示用（例: "9/10"）。空文字 = 採点不能
-	Explanation string   // 参考書テキスト風の解説（md 形式）
-	GradeStatus string   // "graded" | "local_only" | "failed_retryable"
+	IsCorrect   *bool    `json:"is_correct"`          // nil = 採点不能
+	Score       *float64 `json:"score"`               // 0.0〜10.0。nil = 採点不能
+	ScoreLabel  string   `json:"score_label"`         // 表示用（例: "9/10"）。空文字 = 採点不能
+	Explanation string   `json:"explanation"`         // 参考書テキスト風の解説（md 形式）
+	GradeStatus string   `json:"grade_status"`        // "graded" | "local_only" | "failed_retryable"
 }
 
 // Grader はユーザーの回答を採点する構造体。
