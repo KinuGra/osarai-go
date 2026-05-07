@@ -15,7 +15,7 @@ func (s *reviewStore) Create(review *Review) error {
 		`INSERT INTO reviews (answer_id, ease_factor, interval_days, repetitions, next_review_at)
 		 VALUES (?, ?, ?, ?, ?)`,
 		review.AnswerID, review.EaseFactor, review.IntervalDays,
-		review.Repetitions, review.NextReviewAt.Format("2006-01-02"),
+		review.Repetitions, formatDate(review.NextReviewAt),
 	)
 	if err != nil {
 		return fmt.Errorf("review create: %w", err)
@@ -33,7 +33,7 @@ func (s *reviewStore) FindDue(now time.Time) ([]Review, error) {
 		`SELECT id, answer_id, ease_factor, interval_days, repetitions, next_review_at, updated_at
 		 FROM reviews WHERE next_review_at <= ?
 		 ORDER BY next_review_at`,
-		now.Format("2006-01-02"),
+		formatDate(now),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("review find due: %w", err)
@@ -49,10 +49,10 @@ func (s *reviewStore) Update(review *Review) error {
 		     interval_days  = ?,
 		     repetitions    = ?,
 		     next_review_at = ?,
-		     updated_at     = CURRENT_TIMESTAMP
+		     updated_at     = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 		 WHERE id = ?`,
 		review.EaseFactor, review.IntervalDays, review.Repetitions,
-		review.NextReviewAt.Format("2006-01-02"), review.ID,
+		formatDate(review.NextReviewAt), review.ID,
 	)
 	return err
 }

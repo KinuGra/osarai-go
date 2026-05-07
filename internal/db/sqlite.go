@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -29,14 +30,24 @@ func openStore(path string) (Store, error) {
 	return newStore(db), nil
 }
 
+// buildDSN は PRAGMA を DSN に埋め込んで返す。
+// modernc.org/sqlite は _pragma パラメータを新規接続ごとに適用するため、
+// コネクションプールから払い出される全コネクションで FK 制約が有効になる。
+func buildDSN(path string) string {
+	q := url.Values{}
+	// 接続ごとに必要な PRAGMA
+	q.Add("_pragma", "foreign_keys(1)")
+	q.Add("_pragma", "busy_timeout(5000)")
+	// DB レベルで永続化される PRAGMA（最初の接続で設定されれば以降は不要だが、
+	// 毎回送っても無害）
+	q.Add("_pragma", "journal_mode(WAL)")
+	return "file:" + path + "?" + q.Encode()
+}
+
 func openDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", buildDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
-	}
-	if err := applyPragmas(db); err != nil {
-		db.Close()
-		return nil, err
 	}
 	if err := migrate(db); err != nil {
 		db.Close()
@@ -78,19 +89,6 @@ func (s *sqlStore) Reviews() ReviewStore           { return s.reviews }
 func (s *sqlStore) ReviewLogs() ReviewLogStore     { return s.reviewLogs }
 func (s *sqlStore) Close() error                   { return s.db.Close() }
 
-func applyPragmas(db *sql.DB) error {
-	for _, p := range []string{
-		"PRAGMA foreign_keys = ON",
-		"PRAGMA journal_mode = WAL",
-		"PRAGMA busy_timeout = 5000",
-	} {
-		if _, err := db.Exec(p); err != nil {
-			return fmt.Errorf("pragma %q: %w", p, err)
-		}
-	}
-	return nil
-}
-
 func migrate(db *sql.DB) error {
 	var version int
 	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
@@ -124,7 +122,7 @@ func createTables(tx *sql.Tx) error {
 			name       TEXT     NOT NULL UNIQUE,
 			path       TEXT     NOT NULL UNIQUE,
 			remote_url TEXT,
-			created_at TEXT     NOT NULL DEFAULT CURRENT_TIMESTAMP
+			created_at TEXT     NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS commits (
@@ -137,7 +135,7 @@ func createTables(tx *sql.Tx) error {
 			diff_summary  TEXT,
 			reviewed      INTEGER  NOT NULL DEFAULT 0,
 			committed_at  TEXT     NOT NULL,
-			created_at    TEXT     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_at    TEXT     NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
 			UNIQUE(repository_id, hash)
 		)`,
 
@@ -149,7 +147,7 @@ func createTables(tx *sql.Tx) error {
 			total_questions INTEGER  NOT NULL DEFAULT 0,
 			correct_count   INTEGER  NOT NULL DEFAULT 0,
 			max_streak      INTEGER  NOT NULL DEFAULT 0,
-			started_at      TEXT     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			started_at      TEXT     NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
 			finished_at     TEXT
 		)`,
 
@@ -165,7 +163,7 @@ func createTables(tx *sql.Tx) error {
 			correct_answer TEXT     NOT NULL,
 			diff_context   TEXT,
 			sort_order     INTEGER  NOT NULL DEFAULT 0,
-			created_at     TEXT     NOT NULL DEFAULT CURRENT_TIMESTAMP
+			created_at     TEXT     NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS answers (
@@ -180,7 +178,7 @@ func createTables(tx *sql.Tx) error {
 			                        CHECK(grade_status IN ('graded','local_only','failed_retryable')),
 			saved          INTEGER  NOT NULL DEFAULT 0,
 			export_path    TEXT,
-			created_at     TEXT     NOT NULL DEFAULT CURRENT_TIMESTAMP
+			created_at     TEXT     NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS reviews (
@@ -190,7 +188,7 @@ func createTables(tx *sql.Tx) error {
 			interval_days INTEGER  NOT NULL DEFAULT 1   CHECK(interval_days >= 1),
 			repetitions   INTEGER  NOT NULL DEFAULT 0   CHECK(repetitions >= 0),
 			next_review_at TEXT    NOT NULL,
-			updated_at    TEXT     NOT NULL DEFAULT CURRENT_TIMESTAMP
+			updated_at    TEXT     NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS review_logs (
@@ -201,7 +199,7 @@ func createTables(tx *sql.Tx) error {
 			ease_factor_after  REAL     NOT NULL,
 			interval_before    INTEGER  NOT NULL,
 			interval_after     INTEGER  NOT NULL,
-			created_at         TEXT     NOT NULL DEFAULT CURRENT_TIMESTAMP
+			created_at         TEXT     NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 		)`,
 	} {
 		if _, err := tx.Exec(stmt); err != nil {
@@ -226,12 +224,44 @@ func createIndexes(tx *sql.Tx) error {
 	return nil
 }
 
+// ---- 日時の変換ヘルパー ----
+//
+// db_architect.txt の規約: 全ての日時は ISO-8601 UTC で保存する。
+// modernc.org/sqlite ドライバは time.Time を直接渡すと Go の独自フォーマットで
+// 保存してしまうため、Store 実装側で必ず formatTime を通すこと。
+
+// formatTime は time.Time を ISO-8601 UTC 文字列に変換する。
+// time.Time のゼロ値は空文字列を返す。
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+// formatDate は time.Time を YYYY-MM-DD（UTC）に変換する。next_review_at 用。
+func formatDate(t time.Time) string {
+	return t.UTC().Format("2006-01-02")
+}
+
 // parseTime は SQLite の TEXT 日時を time.Time に変換する。
+// 仕様上は ISO-8601 UTC のみだが、SQLite の DEFAULT CURRENT_TIMESTAMP
+// が返す "YYYY-MM-DD HH:MM:SS" 形式なども許容する。
 func parseTime(b []byte) (time.Time, error) {
-	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02"} {
-		if t, err := time.Parse(layout, string(b)); err == nil {
-			return t, nil
+	s := string(b)
+	if s == "" {
+		return time.Time{}, nil
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02T15:04:05Z",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC(), nil
 		}
 	}
-	return time.Time{}, fmt.Errorf("cannot parse time: %q", string(b))
+	return time.Time{}, fmt.Errorf("cannot parse time: %q", s)
 }

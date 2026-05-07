@@ -13,7 +13,7 @@ func (s *sessionStore) Create(session *Session) error {
 	res, err := s.db.Exec(
 		`INSERT INTO sessions (mode, repository_id, source_ref, started_at)
 		 VALUES (?, ?, ?, ?)`,
-		session.Mode, session.RepositoryID, session.SourceRef, session.StartedAt,
+		session.Mode, session.RepositoryID, session.SourceRef, formatTime(session.StartedAt),
 	)
 	if err != nil {
 		return fmt.Errorf("session create: %w", err)
@@ -29,7 +29,7 @@ func (s *sessionStore) Create(session *Session) error {
 func (s *sessionStore) Finish(id int64, totalQuestions, correctCount, maxStreak int) error {
 	_, err := s.db.Exec(
 		`UPDATE sessions
-		 SET finished_at     = CURRENT_TIMESTAMP,
+		 SET finished_at     = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
 		     total_questions  = ?,
 		     correct_count    = ?,
 		     max_streak       = ?
