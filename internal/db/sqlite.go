@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -84,76 +85,73 @@ func migrate(db *sql.DB) error {
 func createTables(tx *sql.Tx) error {
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS repositories (
-			id         INTEGER PRIMARY KEY AUTOINCREMENT,
-			name       TEXT    NOT NULL,
-			path       TEXT    NOT NULL UNIQUE,
+			id         INTEGER  PRIMARY KEY AUTOINCREMENT,
+			path       TEXT     NOT NULL UNIQUE,
+			name       TEXT     NOT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS commits (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			repository_id INTEGER NOT NULL REFERENCES repositories(id),
-			hash          TEXT    NOT NULL,
+			id            INTEGER  PRIMARY KEY AUTOINCREMENT,
+			repository_id INTEGER  NOT NULL REFERENCES repositories(id),
+			hash          TEXT     NOT NULL,
 			message       TEXT,
-			author        TEXT,
-			committed_at  DATETIME,
-			reviewed      INTEGER NOT NULL DEFAULT 0,
+			diff_body     TEXT,
+			reviewed      INTEGER  NOT NULL DEFAULT 0,
 			created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(repository_id, hash)
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS sessions (
-			id              INTEGER PRIMARY KEY AUTOINCREMENT,
-			repository_id   INTEGER REFERENCES repositories(id),
-			started_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			ended_at        DATETIME,
-			total_questions INTEGER NOT NULL DEFAULT 0,
-			correct_count   INTEGER NOT NULL DEFAULT 0,
-			max_streak      INTEGER NOT NULL DEFAULT 0
+			id            INTEGER  PRIMARY KEY AUTOINCREMENT,
+			repository_id INTEGER  NOT NULL REFERENCES repositories(id),
+			commit_hash   TEXT,
+			diff_scope    TEXT,
+			started_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			finished_at   DATETIME
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS questions (
-			id             INTEGER PRIMARY KEY AUTOINCREMENT,
-			session_id     INTEGER NOT NULL REFERENCES sessions(id),
-			commit_id      INTEGER REFERENCES commits(id),
-			title          TEXT,
-			content        TEXT    NOT NULL,
-			question_type  TEXT    NOT NULL,
-			choices        TEXT,
-			correct_answer TEXT,
-			category       TEXT,
-			saved          INTEGER NOT NULL DEFAULT 0,
-			created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+			id            INTEGER  PRIMARY KEY AUTOINCREMENT,
+			session_id    INTEGER  NOT NULL REFERENCES sessions(id),
+			commit_id     INTEGER  REFERENCES commits(id),
+			title         TEXT,
+			body          TEXT     NOT NULL,
+			question_type TEXT     NOT NULL,
+			choices       TEXT,
+			answer        TEXT,
+			explanation   TEXT,
+			saved_for_md  INTEGER  NOT NULL DEFAULT 0,
+			created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS answers (
-			id             INTEGER PRIMARY KEY AUTOINCREMENT,
-			question_id    INTEGER NOT NULL REFERENCES questions(id),
-			user_answer    TEXT,
-			is_correct     INTEGER,
-			ai_score       INTEGER,
-			ai_explanation TEXT,
-			grade_status   TEXT    NOT NULL,
-			self_rating    TEXT,
-			answered_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+			id           INTEGER  PRIMARY KEY AUTOINCREMENT,
+			question_id  INTEGER  NOT NULL REFERENCES questions(id),
+			user_answer  TEXT,
+			is_correct   INTEGER,
+			score        INTEGER,
+			grade_status TEXT     NOT NULL,
+			explanation  TEXT,
+			created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS reviews (
-			id               INTEGER PRIMARY KEY AUTOINCREMENT,
-			question_id      INTEGER NOT NULL UNIQUE REFERENCES questions(id),
-			interval         INTEGER NOT NULL DEFAULT 1,
-			easiness_factor  REAL    NOT NULL DEFAULT 2.5,
-			repetitions      INTEGER NOT NULL DEFAULT 0,
-			next_review_at   DATE    NOT NULL,
-			last_reviewed_at DATETIME,
-			created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+			id             INTEGER  PRIMARY KEY AUTOINCREMENT,
+			question_id    INTEGER  NOT NULL UNIQUE REFERENCES questions(id),
+			interval       REAL     NOT NULL DEFAULT 1.0,
+			repetitions    INTEGER  NOT NULL DEFAULT 0,
+			ease_factor    REAL     NOT NULL DEFAULT 2.5,
+			next_review_at DATE     NOT NULL,
+			created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS review_logs (
-			id          INTEGER PRIMARY KEY AUTOINCREMENT,
-			review_id   INTEGER NOT NULL REFERENCES reviews(id),
-			self_rating TEXT    NOT NULL,
-			reviewed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+			id          INTEGER  PRIMARY KEY AUTOINCREMENT,
+			review_id   INTEGER  NOT NULL REFERENCES reviews(id),
+			rating      INTEGER  NOT NULL,
+			created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 	}
 
@@ -163,4 +161,14 @@ func createTables(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+// parseTime は SQLite の DATETIME 文字列を time.Time に変換する。
+func parseTime(b []byte) (time.Time, error) {
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02"} {
+		if t, err := time.Parse(layout, string(b)); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot parse time: %q", string(b))
 }

@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 )
 
@@ -9,14 +8,18 @@ type answerStore struct{ db *sql.DB }
 
 func NewAnswerStore(db *sql.DB) AnswerStore { return &answerStore{db} }
 
-func (s *answerStore) Save(_ context.Context, _ *Answer) error {
+func (s *answerStore) Save(_ *Answer) error {
 	panic("TODO: implement")
 }
 
-func (s *answerStore) FindByQuestion(_ context.Context, _ int64) (*Answer, error) {
+func (s *answerStore) FindByQuestionID(_ int64) (*Answer, error) {
 	panic("TODO: implement")
 }
 
-func (s *answerStore) ListRetryable(_ context.Context) ([]*Answer, error) {
+func (s *answerStore) FindRetryable() ([]Answer, error) {
+	panic("TODO: implement")
+}
+
+func (s *answerStore) UpdateGradeStatus(_ int64, _ string) error {
 	panic("TODO: implement")
 }
