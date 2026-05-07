@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -16,11 +17,16 @@ func openTestDB(t *testing.T) (*sql.DB, func()) {
 	return db, func() { db.Close() }
 }
 
+// repoCounter は同一テスト内で複数の repository を作るときに一意な name/path を生成するためのカウンター。
+var repoCounter int64
+
 func insertRepo(t *testing.T, db *sql.DB) int64 {
 	t.Helper()
+	repoCounter++
 	res, err := db.Exec(
 		`INSERT INTO repositories (name, path) VALUES (?, ?)`,
-		"testrepo", "/tmp/testrepo",
+		fmt.Sprintf("testrepo%d", repoCounter),
+		fmt.Sprintf("/tmp/testrepo%d", repoCounter),
 	)
 	if err != nil {
 		t.Fatalf("insert repo: %v", err)

@@ -157,30 +157,31 @@ func TestUniqueConstraints(t *testing.T) {
 	db, cleanup := openTestDB(t)
 	defer cleanup()
 
+	// repositories: name と path が UNIQUE
+	if _, err := db.Exec(`INSERT INTO repositories (name, path) VALUES (?, ?)`, "uniqrepo", "/tmp/uniq"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO repositories (name, path) VALUES (?, ?)`, "uniqrepo", "/tmp/other"); err == nil {
+		t.Error("expected UNIQUE violation on repositories.name")
+	}
+	if _, err := db.Exec(`INSERT INTO repositories (name, path) VALUES (?, ?)`, "other", "/tmp/uniq"); err == nil {
+		t.Error("expected UNIQUE violation on repositories.path")
+	}
+
+	// commits: (repository_id, hash) の複合 UNIQUE
 	repoID := insertRepo(t, db)
 	hash := "1234567890123456789012345678901234567890"
-
-	_, err := db.Exec(
+	if _, err := db.Exec(
 		`INSERT INTO commits (repository_id, hash, message, author_name, author_email, committed_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		repoID, hash, "m", "n", "e", "2024-01-01T00:00:00Z",
-	)
-	if err != nil {
-		t.Fatalf("first insert: %v", err)
+	); err != nil {
+		t.Fatal(err)
 	}
-
-	// 同じ (repository_id, hash) は拒否される
-	_, err = db.Exec(
+	if _, err := db.Exec(
 		`INSERT INTO commits (repository_id, hash, message, author_name, author_email, committed_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		repoID, hash, "m2", "n", "e", "2024-01-01T00:00:00Z",
-	)
-	if err == nil {
+	); err == nil {
 		t.Error("expected UNIQUE violation on (repository_id, hash)")
-	}
-
-	// repositories.name UNIQUE
-	_, err = db.Exec(`INSERT INTO repositories (name, path) VALUES (?, ?)`, "testrepo", "/tmp/other")
-	if err == nil {
-		t.Error("expected UNIQUE violation on repositories.name")
 	}
 }
 
@@ -271,6 +272,111 @@ func TestDefaultTimestampFormat(t *testing.T) {
 
 	if _, err := time.Parse(time.RFC3339, stored); err != nil {
 		t.Errorf("default created_at not ISO-8601: %q (%v)", stored, err)
+	}
+}
+
+// TestPragmaApplied は3つの PRAGMA が新規接続でも有効になっていることを検証する。
+func TestPragmaApplied(t *testing.T) {
+	db, cleanup := openTestDB(t)
+	defer cleanup()
+
+	tests := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{"foreign_keys", "PRAGMA foreign_keys", "1"},
+		{"busy_timeout", "PRAGMA busy_timeout", "5000"},
+		{"journal_mode", "PRAGMA journal_mode", "wal"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got string
+			if err := db.QueryRow(tt.query).Scan(&got); err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("%s = %q, want %q", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestAllTablesCreated は仕様書記載の7テーブルが全て作られていることを検証する。
+func TestAllTablesCreated(t *testing.T) {
+	db, cleanup := openTestDB(t)
+	defer cleanup()
+
+	rows, err := db.Query(
+		`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	got := map[string]bool{}
+	for rows.Next() {
+		var name string
+		rows.Scan(&name) //nolint:errcheck
+		got[name] = true
+	}
+
+	want := []string{
+		"repositories", "commits", "sessions",
+		"questions", "answers", "reviews", "review_logs",
+	}
+	for _, name := range want {
+		if !got[name] {
+			t.Errorf("table %q not created", name)
+		}
+	}
+}
+
+// TestSchemaVersionPersisted は user_version が正しくセットされ、再 Open でも保持されることを検証する。
+func TestSchemaVersionPersisted(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/test.db"
+
+	db1, _ := openDB(path)
+	var v1 int
+	db1.QueryRow("PRAGMA user_version").Scan(&v1) //nolint:errcheck
+	db1.Close()
+
+	if v1 != currentSchemaVersion {
+		t.Fatalf("first open: version = %d, want %d", v1, currentSchemaVersion)
+	}
+
+	db2, _ := openDB(path)
+	defer db2.Close()
+	var v2 int
+	db2.QueryRow("PRAGMA user_version").Scan(&v2) //nolint:errcheck
+	if v2 != currentSchemaVersion {
+		t.Errorf("second open: version = %d, want %d", v2, currentSchemaVersion)
+	}
+}
+
+// TestMigrationSkippedWhenUpToDate は既に最新バージョンなら migration がスキップされることを検証する。
+func TestMigrationSkippedWhenUpToDate(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/test.db"
+
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// 1回目で必ずテーブルが出来ているはず
+	var count int
+	db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sessions'`).Scan(&count) //nolint:errcheck
+	if count != 1 {
+		t.Fatal("sessions table should exist after first open")
+	}
+
+	// 2回目の migrate は何も変更しないはず（エラーにもならない）
+	if err := migrate(db); err != nil {
+		t.Errorf("re-migrate should be no-op, got error: %v", err)
 	}
 }
 
