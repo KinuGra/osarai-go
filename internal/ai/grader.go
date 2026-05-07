@@ -2,6 +2,15 @@ package ai
 
 import "context"
 
+// GradeStatus は採点結果のステータス。
+type GradeStatus string
+
+const (
+	GradeStatusGraded          GradeStatus = "graded"           // AI 採点成功
+	GradeStatusLocalOnly       GradeStatus = "local_only"       // 選択式のローカル比較のみ（API 失敗時フォールバック）
+	GradeStatusFailedRetryable GradeStatus = "failed_retryable" // 記述式 AI 採点失敗（retry-grading 対象）
+)
+
 // GradeRequest は採点リクエスト。
 type GradeRequest struct {
 	Question    Question // 元の問題
@@ -14,11 +23,11 @@ type GradeRequest struct {
 // タグが必須（タグなしだと is_correct → IsCorrect のマッピングが失敗する）。
 // IsCorrect と Score はポインタ型で、採点不能時（記述式 API 失敗など）は nil になる。
 type GradeResult struct {
-	IsCorrect   *bool    `json:"is_correct"`          // nil = 採点不能
-	Score       *float64 `json:"score"`               // 0.0〜10.0。nil = 採点不能
-	ScoreLabel  string   `json:"score_label"`         // 表示用（例: "9/10"）。空文字 = 採点不能
-	Explanation string   `json:"explanation"`         // 参考書テキスト風の解説（md 形式）
-	GradeStatus string   `json:"grade_status"`        // "graded" | "local_only" | "failed_retryable"
+	IsCorrect   *bool       `json:"is_correct"`  // nil = 採点不能
+	Score       *float64    `json:"score"`       // 0.0〜10.0。nil = 採点不能
+	ScoreLabel  string      `json:"score_label"` // 表示用（例: "9/10"）。空文字 = 採点不能
+	Explanation string      `json:"explanation"` // 参考書テキスト風の解説（md 形式）
+	GradeStatus GradeStatus `json:"grade_status"`
 }
 
 // Grader はユーザーの回答を採点する構造体。
@@ -34,9 +43,9 @@ func NewGrader(provider LLMProvider) *Grader {
 // GradeAnswer はユーザーの回答を採点し、参考書風の解説を生成する。
 //
 // フォールバック仕様:
-//   - 選択式 + API 成功: 全フィールドを返す（GradeStatus="graded"）
-//   - 選択式 + API 失敗: ローカル比較のみ（GradeStatus="local_only"）
-//   - 記述式 + API 失敗: IsCorrect=nil（GradeStatus="failed_retryable"）
+//   - 選択式 + API 成功: 全フィールドを返す（GradeStatus=GradeStatusGraded）
+//   - 選択式 + API 失敗: ローカル比較のみ（GradeStatus=GradeStatusLocalOnly）
+//   - 記述式 + API 失敗: IsCorrect=nil（GradeStatus=GradeStatusFailedRetryable）
 //
 // TODO: 後続 Issue でプロンプトテンプレートとフォールバックロジックを実装する。
 func (g *Grader) GradeAnswer(ctx context.Context, req GradeRequest) (GradeResult, error) {

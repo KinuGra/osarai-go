@@ -2,17 +2,35 @@ package ai
 
 import "context"
 
+// QuestionType は問題の種類。
+type QuestionType string
+
+const (
+	QuestionTypeChoice  QuestionType = "choice"  // 選択式（4〜5択）
+	QuestionTypeWritten QuestionType = "written" // 記述式
+)
+
+// QuestionCategory は問題のカテゴリ。MVP の3カテゴリを定義。
+// v2 以降で DesignPattern / Pitfall / Fundamentals を追加予定。
+type QuestionCategory string
+
+const (
+	QuestionCategoryDesign    QuestionCategory = "design"    // 設計判断
+	QuestionCategoryLanguage  QuestionCategory = "language"  // 言語知識
+	QuestionCategoryFramework QuestionCategory = "framework" // FW・ライブラリ
+)
+
 // Question は AI が生成した1問分のデータ。
 // json タグは LLM レスポンスの JSON キー名と一致させる必要がある。
 // 特に correct_answer のように snake_case を含むフィールドは
 // タグなしだと json.Unmarshal でマッチしないため必須。
 type Question struct {
-	Title         string   `json:"title"`          // 短いトピック名（例: "errors.Is vs errors.As"）
-	Category      string   `json:"category"`       // "design" | "language" | "framework"
-	Type          string   `json:"type"`           // "choice" | "written"
-	Body          string   `json:"body"`           // 問題文
-	Choices       []string `json:"choices"`        // 選択肢（Type="choice" の場合のみ）
-	CorrectAnswer string   `json:"correct_answer"` // 正解（choice: "A"〜"D", written: 模範解答）
+	Title         string           `json:"title"`          // 短いトピック名（例: "errors.Is vs errors.As"）
+	Category      QuestionCategory `json:"category"`       // 問題カテゴリ
+	Type          QuestionType     `json:"type"`           // 問題種別
+	Body          string           `json:"body"`           // 問題文
+	Choices       []string         `json:"choices"`        // 選択肢（Type=choice の場合のみ）
+	CorrectAnswer string           `json:"correct_answer"` // 正解（choice: "A"〜"D", written: 模範解答）
 }
 
 // GenerateRequest は問題生成のリクエスト。
