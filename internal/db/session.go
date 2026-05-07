@@ -11,9 +11,9 @@ func NewSessionStore(db *sql.DB) SessionStore { return &sessionStore{db} }
 
 func (s *sessionStore) Create(session *Session) error {
 	res, err := s.db.Exec(
-		`INSERT INTO sessions (repository_id, commit_hash, diff_scope, started_at)
+		`INSERT INTO sessions (mode, repository_id, source_ref, started_at)
 		 VALUES (?, ?, ?, ?)`,
-		session.RepositoryID, session.CommitHash, session.DiffScope, session.StartedAt,
+		session.Mode, session.RepositoryID, session.SourceRef, session.StartedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("session create: %w", err)
@@ -26,9 +26,15 @@ func (s *sessionStore) Create(session *Session) error {
 	return nil
 }
 
-func (s *sessionStore) Finish(id int64) error {
+func (s *sessionStore) Finish(id int64, totalQuestions, correctCount, maxStreak int) error {
 	_, err := s.db.Exec(
-		`UPDATE sessions SET finished_at = CURRENT_TIMESTAMP WHERE id = ?`, id,
+		`UPDATE sessions
+		 SET finished_at     = CURRENT_TIMESTAMP,
+		     total_questions  = ?,
+		     correct_count    = ?,
+		     max_streak       = ?
+		 WHERE id = ?`,
+		totalQuestions, correctCount, maxStreak, id,
 	)
 	if err != nil {
 		return fmt.Errorf("session finish: %w", err)

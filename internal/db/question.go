@@ -12,11 +12,12 @@ func NewQuestionStore(db *sql.DB) QuestionStore { return &questionStore{db} }
 func (s *questionStore) Save(question *Question) error {
 	res, err := s.db.Exec(
 		`INSERT INTO questions
-		 (session_id, commit_id, title, body, question_type, choices, answer, explanation, saved_for_md)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		question.SessionID, question.CommitID, question.Title, question.Body,
-		question.QuestionType, question.Choices, question.Answer, question.Explanation,
-		question.SavedForMD,
+		 (session_id, commit_id, title, category, question_type, body,
+		  choices, correct_answer, diff_context, sort_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		question.SessionID, question.CommitID, question.Title, question.Category,
+		question.QuestionType, question.Body, question.Choices, question.CorrectAnswer,
+		question.DiffContext, question.SortOrder,
 	)
 	if err != nil {
 		return fmt.Errorf("question save: %w", err)
@@ -31,12 +32,13 @@ func (s *questionStore) Save(question *Question) error {
 
 func (s *questionStore) FindBySessionID(sessionID int64) ([]Question, error) {
 	rows, err := s.db.Query(
-		`SELECT id, session_id, commit_id, title, body, question_type, choices, answer, explanation, saved_for_md, created_at
-		 FROM questions WHERE session_id = ? ORDER BY id`,
+		`SELECT id, session_id, commit_id, title, category, question_type,
+		        body, choices, correct_answer, diff_context, sort_order, created_at
+		 FROM questions WHERE session_id = ? ORDER BY sort_order`,
 		sessionID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("question list by session: %w", err)
+		return nil, fmt.Errorf("question find by session: %w", err)
 	}
 	defer rows.Close()
 
@@ -44,15 +46,19 @@ func (s *questionStore) FindBySessionID(sessionID int64) ([]Question, error) {
 	for rows.Next() {
 		var q Question
 		var commitID sql.NullInt64
+		var diffContext sql.NullString
 		var createdAt []byte
 		if err := rows.Scan(
-			&q.ID, &q.SessionID, &commitID, &q.Title, &q.Body,
-			&q.QuestionType, &q.Choices, &q.Answer, &q.Explanation, &q.SavedForMD, &createdAt,
+			&q.ID, &q.SessionID, &commitID, &q.Title, &q.Category, &q.QuestionType,
+			&q.Body, &q.Choices, &q.CorrectAnswer, &diffContext, &q.SortOrder, &createdAt,
 		); err != nil {
 			return nil, err
 		}
 		if commitID.Valid {
 			q.CommitID = &commitID.Int64
+		}
+		if diffContext.Valid {
+			q.DiffContext = &diffContext.String
 		}
 		if t, err := parseTime(createdAt); err == nil {
 			q.CreatedAt = t
@@ -60,41 +66,4 @@ func (s *questionStore) FindBySessionID(sessionID int64) ([]Question, error) {
 		qs = append(qs, q)
 	}
 	return qs, rows.Err()
-}
-
-func (s *questionStore) FindSaved() ([]Question, error) {
-	rows, err := s.db.Query(
-		`SELECT id, session_id, commit_id, title, body, question_type, choices, answer, explanation, saved_for_md, created_at
-		 FROM questions WHERE saved_for_md = 1 ORDER BY id`,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("question find saved: %w", err)
-	}
-	defer rows.Close()
-
-	var qs []Question
-	for rows.Next() {
-		var q Question
-		var commitID sql.NullInt64
-		var createdAt []byte
-		if err := rows.Scan(
-			&q.ID, &q.SessionID, &commitID, &q.Title, &q.Body,
-			&q.QuestionType, &q.Choices, &q.Answer, &q.Explanation, &q.SavedForMD, &createdAt,
-		); err != nil {
-			return nil, err
-		}
-		if commitID.Valid {
-			q.CommitID = &commitID.Int64
-		}
-		if t, err := parseTime(createdAt); err == nil {
-			q.CreatedAt = t
-		}
-		qs = append(qs, q)
-	}
-	return qs, rows.Err()
-}
-
-func (s *questionStore) MarkSavedForMD(id int64) error {
-	_, err := s.db.Exec(`UPDATE questions SET saved_for_md = 1 WHERE id = ?`, id)
-	return err
 }
