@@ -8,7 +8,7 @@ jobs:
         #    これがないとコードがない状態で始まる
       - uses: actions/setup-go@v5 # ② Go をインストール
         with:
-          go-version: "1.25" #    プロジェクトの Go バージョンに合わせる
+          go-version: "1.24" #    プロジェクトの Go バージョンに合わせる
           #    go.mod の go ディレクティブと一致させる
       - run: go test ./... # ③ 全パッケージのユニットテストを実行
         #    ./... = 再帰的に全サブディレクトリ
@@ -17,5 +17,7 @@ jobs:
         #    golangci-lint と一部重複するが高速なので残す
       - name: golangci-lint # ⑤ リンター実行
         uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
         #    公式 Action。golangci-lint のインストール不要
         #    .golangci-lint.yml を自動で読み込む

@@ -1,0 +1,17 @@
+# おさらいGo デフォルト設定
+# このファイルは ~/.osarai/config.toml にコピーされます。
+# 環境変数が設定されている場合、そちらが優先されます。
+
+[llm]
+provider = "gemini"
+
+[llm.gemini]
+api_key = ""                    # または環境変数 GEMINI_API_KEY を設定
+model = "gemini-2.5-flash"
+
+[questions]
+choice_count = 5                # 選択式の問題数
+written_count = 1               # 記述式の問題数
+
+[export]
+dir = "~/.osarai/exports"       # md エクスポート先
