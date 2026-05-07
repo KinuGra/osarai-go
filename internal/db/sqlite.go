@@ -15,7 +15,11 @@ const currentSchemaVersion = 1
 
 // Open opens (or creates) ~/.osarai/data.db and returns a Store.
 func Open() (Store, error) {
-	dir := filepath.Join(os.Getenv("HOME"), ".osarai")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("get home dir: %w", err)
+	}
+	dir := filepath.Join(home, ".osarai")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
