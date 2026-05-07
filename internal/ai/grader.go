@@ -3,19 +3,20 @@ package ai
 import "context"
 
 // GradeRequest は採点リクエスト。
-// 問題・ユーザーの回答・元の diff をセットにして Grader に渡す。
 type GradeRequest struct {
-	Question   Question // 元の問題
-	UserAnswer string   // ユーザーの回答
-	DiffBody   string   // 元の diff（文脈として AI に渡す）
+	Question    Question // 元の問題
+	UserAnswer  string   // ユーザーの回答
+	DiffContext string   // 元の diff（文脈として AI に渡す）
 }
 
 // GradeResult は AI による採点結果。
+// IsCorrect と Score はポインタ型で、採点不能時（記述式 API 失敗など）は nil になる。
 type GradeResult struct {
-	IsCorrect   bool   `json:"is_correct"`  // 正解かどうか
-	Score       int    `json:"score"`       // 0〜100（記述式の部分点用）
-	Explanation string `json:"explanation"` // 参考書風の解説（AI が生成）
-	RawJSON     string // AI の生レスポンス（デバッグ用）
+	IsCorrect   *bool    // nil = 採点不能
+	Score       *float64 // 0.0〜10.0。nil = 採点不能
+	ScoreLabel  string   // 表示用（例: "9/10"）。空文字 = 採点不能
+	Explanation string   // 参考書テキスト風の解説（md 形式）
+	GradeStatus string   // "graded" | "local_only" | "failed_retryable"
 }
 
 // Grader はユーザーの回答を採点する構造体。
@@ -28,14 +29,14 @@ func NewGrader(provider LLMProvider) *Grader {
 	return &Grader{provider: provider}
 }
 
-// GradeChoice は選択式問題を採点する。
-// TODO: 機能 B の担当者が実装する。
-func (g *Grader) GradeChoice(ctx context.Context, req GradeRequest) (*GradeResult, error) {
-	panic("not implemented")
-}
-
-// GradeWritten は記述式問題を採点する。
-// TODO: 機能 B の担当者が実装する。
-func (g *Grader) GradeWritten(ctx context.Context, req GradeRequest) (*GradeResult, error) {
+// GradeAnswer はユーザーの回答を採点し、参考書風の解説を生成する。
+//
+// フォールバック仕様:
+//   - 選択式 + API 成功: 全フィールドを返す（GradeStatus="graded"）
+//   - 選択式 + API 失敗: ローカル比較のみ（GradeStatus="local_only"）
+//   - 記述式 + API 失敗: IsCorrect=nil（GradeStatus="failed_retryable"）
+//
+// TODO: 後続 Issue でプロンプトテンプレートとフォールバックロジックを実装する。
+func (g *Grader) GradeAnswer(ctx context.Context, req GradeRequest) (GradeResult, error) {
 	panic("not implemented")
 }
