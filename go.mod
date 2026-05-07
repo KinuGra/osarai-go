@@ -1,6 +1,6 @@
 module github.com/KinuGra/osarai-go
 
-go 1.24
+go 1.25.0
 
 require github.com/spf13/viper v1.21.0
 
