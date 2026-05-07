@@ -12,11 +12,6 @@ import (
 	"github.com/KinuGra/osarai-go/internal/apperror"
 )
 
-// go:embed ディレクティブ。
-// コメントに見えるが、Go コンパイラへの命令。
-// "defaults/config.default.toml" の中身をビルド時にバイナリに埋め込む。
-// これにより、ビルド後は defaults/ フォルダがなくても動作する。
-//
 //go:embed defaults/config.default.toml
 var defaultConfigBytes []byte
 
@@ -110,10 +105,7 @@ func Load() (*Config, error) {
 
 	// ユーザーの config.toml で上書き
 	viper.SetConfigFile(filepath.Join(dir, "config.toml"))
-	if err := viper.MergeInConfig(); err != nil {
-		// ファイルがなくてもデフォルトで動くので無視
-		// （ensureConfigFile で作成済みのはずだが念のため）
-	}
+	_ = viper.MergeInConfig() // ファイルがなくてもデフォルトで動くので無視
 
 	// 環境変数のバインド
 	// GEMINI_API_KEY が設定されていれば、config.toml の llm.gemini.api_key より優先される
