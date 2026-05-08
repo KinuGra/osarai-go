@@ -41,7 +41,7 @@ func runCheck(_ *cobra.Command, args []string) error {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		fmt.Fprintln(os.Stderr, "  → osarai config init で API キーを設定してください")
-		return nil
+		return err
 	}
 
 	// 2. DB を開く

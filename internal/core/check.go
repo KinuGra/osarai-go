@@ -131,10 +131,14 @@ func (s *Service) runCheck(ctx context.Context, opts CheckOptions) ([]CheckQuest
 }
 
 // truncateDiff は diff テキストを maxRunes 文字に切り詰める。
+// []rune 変換によるメモリ確保を避け、rune 境界のバイトオフセットを直接求める。
 func truncateDiff(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
+	count := 0
+	for i := range s {
+		if count == maxRunes {
+			return s[:i]
+		}
+		count++
 	}
-	return string(runes[:maxRunes])
+	return s
 }

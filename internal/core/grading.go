@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/KinuGra/osarai-go/internal/ai"
@@ -64,8 +65,9 @@ func (s *Service) gradeAnswer(ctx context.Context, req GradeAnswerRequest) (Grad
 			NextReviewAt: time.Now().AddDate(0, 0, 1), // 翌日復習
 		}
 		if err := s.reviewStore.Create(review); err != nil {
-			// Review 作成失敗は致命的でないのでログのみ（将来的にはログ出力）
-			_ = err
+			// Review 作成失敗は致命的でないため採点結果は返すが、標準エラーに記録する
+			// （将来的にはログライブラリで slog.Warn 等に置き換える）
+			fmt.Fprintf(os.Stderr, "warning: SM-2 review レコードの作成に失敗しました: %v\n", err)
 		}
 	}
 
