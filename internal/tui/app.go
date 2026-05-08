@@ -47,6 +47,9 @@ type App struct {
 	// ② ターミナルサイズ（WindowSizeMsg で更新）
 	width  int
 	height int
+
+	// ① 採点中フラグ: true の間は AnsweredMsg を無視して二重採点・UNIQUE 違反を防ぐ
+	grading bool
 }
 
 // NewApp は App を生成する。
@@ -59,7 +62,7 @@ func NewApp(service *core.Service, questions []core.CheckQuestion) *App {
 		width:     80, // WindowSizeMsg 到着前のデフォルト
 		height:    24,
 	}
-	a.currentModel = quiz.New(questions[0], 1, len(questions), a.width)
+	a.currentModel = quiz.New(questions[0], 1, len(questions), a.width, a.height)
 	return a
 }
 
@@ -85,11 +88,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	// quiz → 採点（非同期 Cmd）
+	// ① 採点中の再送信は無視（Enter 連打による UNIQUE 制約違反を防ぐ）
 	case quiz.AnsweredMsg:
+		if a.grading {
+			return a, nil
+		}
+		a.grading = true
 		return a, a.gradeCmd(msg)
 
 	// 採点完了 → 結果画面へ
 	case gradedMsg:
+		a.grading = false
 		// 正解・連続正解カウントを更新
 		if msg.gradeRes.Result.IsCorrect != nil && *msg.gradeRes.Result.IsCorrect {
 			a.correctCount++
@@ -118,6 +127,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// エラー表示（採点失敗など）
 	case errMsg:
+		a.grading = false
 		a.lastErr = msg.err
 		return a, nil
 	}
@@ -177,6 +187,7 @@ func (a *App) advanceQuestion() {
 			a.currentIdx+1,
 			len(a.questions),
 			a.width,
+			a.height,
 		)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -27,21 +28,37 @@ type AnsweredMsg struct {
 	DiffContext  string
 }
 
+// 固定ヘッダー・フッターの行数定数。
+// viewport の高さはターミナル高からこれらを差し引いて決定する。
+const (
+	// quizHeaderH: タイトル行(1) + 空行(1) = 2
+	quizHeaderH = 2
+	// quizChoiceH: 選択肢4行 + 空行(1) + ヒント(1) = 6
+	quizChoiceH = 6
+	// quizWrittenH: 入力ボーダー(3) + ヒント(1) = 4
+	quizWrittenH = 4
+	// viewport と下部コンテンツの間の空行
+	quizSepLines = 1
+)
+
 // Model は出題画面のモデル。
 type Model struct {
-	cq        core.CheckQuestion // 現在の問題
-	cursor    int                // 選択式: 選択肢のカーソル位置（0-based）
-	textInput textinput.Model    // 記述式: テキスト入力
+	cq        core.CheckQuestion
+	cursor    int
+	textInput textinput.Model
 
-	// 問題番号表示用
-	current int // 1-based
+	current int
 	total   int
+	width   int
+	height  int
 
-	width int // ターミナル幅（0 = 未取得）
+	// ② 問題文の viewport（長い問題でも選択肢が画面外に押し出されなくなる）
+	qvp      viewport.Model
+	qvpReady bool
 }
 
 // New は出題画面モデルを生成する。
-func New(cq core.CheckQuestion, current, total, width int) Model {
+func New(cq core.CheckQuestion, current, total, width, height int) Model {
 	ti := textinput.New()
 	ti.Placeholder = "ここに回答を入力..."
 	ti.CharLimit = 500
@@ -50,14 +67,19 @@ func New(cq core.CheckQuestion, current, total, width int) Model {
 		ti.Focus()
 	}
 
-	return Model{
+	m := Model{
 		cq:        cq,
 		cursor:    0,
 		textInput: ti,
 		current:   current,
 		total:     total,
 		width:     width,
+		height:    height,
 	}
+	if width > 0 && height > 0 {
+		m.initQVP()
+	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
@@ -71,6 +93,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		m.height = msg.Height
+		m.initQVP()
 		return m, nil
 	case tea.KeyMsg:
 		switch m.cq.Question.Type {
@@ -81,8 +105,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	// ① KeyMsg 以外のメッセージ（BlinkMsg・FocusMsg 等）を記述式の textinput に転送する。
-	// textinput はカーソル点滅などで自身に BlinkMsg を送り続けるため、
-	// これを転送しないと入力が一切反応しなくなる。
 	if m.cq.Question.Type == ai.QuestionTypeWritten {
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
@@ -95,6 +117,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) updateChoice(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	choices := m.cq.Question.Choices
 	switch msg.String() {
+	// 選択肢カーソル操作
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -103,11 +126,19 @@ func (m Model) updateChoice(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(choices)-1 {
 			m.cursor++
 		}
+	// ② 問題文のスクロール（Ctrl+U/D、または pgup/pgdn）
+	case "ctrl+u", "pgup":
+		if m.qvpReady {
+			m.qvp.HalfViewUp()
+		}
+	case "ctrl+d", "pgdn":
+		if m.qvpReady {
+			m.qvp.HalfViewDown()
+		}
 	case "enter", " ":
 		if len(choices) == 0 {
 			return m, nil
 		}
-		// 選択肢のラベル（"A"〜"D"）を抽出して回答とする
 		answer := choiceLabel(m.cursor)
 		return m, func() tea.Msg {
 			return AnsweredMsg{
@@ -128,7 +159,7 @@ func (m Model) updateWritten(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		answer := strings.TrimSpace(m.textInput.Value())
 		if answer == "" {
-			return m, nil // 空文字は送信しない
+			return m, nil
 		}
 		return m, func() tea.Msg {
 			return AnsweredMsg{
@@ -139,10 +170,26 @@ func (m Model) updateWritten(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				DiffContext:  m.cq.DiffContext,
 			}
 		}
+	// ② 記述式では ↑↓ で問題文をスクロール（textinput は ↑↓ を使わない）
+	case "up", "k":
+		if m.qvpReady {
+			m.qvp.LineUp(1)
+		}
+	case "down":
+		if m.qvpReady {
+			m.qvp.LineDown(1)
+		}
+	case "ctrl+u", "pgup":
+		if m.qvpReady {
+			m.qvp.HalfViewUp()
+		}
+	case "ctrl+d", "pgdn":
+		if m.qvpReady {
+			m.qvp.HalfViewDown()
+		}
 	case "ctrl+c":
 		return m, tea.Quit
 	}
-	// テキスト入力コンポーネントに委譲
 	var cmd tea.Cmd
 	m.textInput, cmd = m.textInput.Update(msg)
 	return m, cmd
@@ -150,13 +197,11 @@ func (m Model) updateWritten(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	q := m.cq.Question
-
-	// ② コンテンツ幅を terminal 幅に合わせる
 	cw := m.contentWidth()
 
 	var sb strings.Builder
 
-	// ヘッダー: "Q2/5 [language] 選択式"
+	// ── 固定ヘッダー ──
 	typeLabel := "選択式"
 	if q.Type == ai.QuestionTypeWritten {
 		typeLabel = "記述式"
@@ -169,11 +214,21 @@ func (m Model) View() string {
 	sb.WriteString(styles.Title.Render(header))
 	sb.WriteString("\n\n")
 
-	// 問題文（長い場合に折り返す）
-	sb.WriteString(lipgloss.NewStyle().Width(cw).Render(q.Body))
+	// ── 問題文（viewport or フォールバック）──
+	if m.qvpReady {
+		sb.WriteString(m.qvp.View())
+		// スクロール可能なら % 表示
+		if m.qvp.TotalLineCount() > m.qvp.Height {
+			pct := int(m.qvp.ScrollPercent() * 100)
+			sb.WriteString("\n")
+			sb.WriteString(styles.Muted.Render(fmt.Sprintf("── 問題 %d%% ──", pct)))
+		}
+	} else {
+		sb.WriteString(lipgloss.NewStyle().Width(cw).Render(q.Body))
+	}
 	sb.WriteString("\n\n")
 
-	// 選択肢 or テキスト入力
+	// ── 選択肢 or テキスト入力 ──
 	switch q.Type {
 	case ai.QuestionTypeChoice:
 		for i, choice := range q.Choices {
@@ -186,22 +241,47 @@ func (m Model) View() string {
 			sb.WriteString(fmt.Sprintf("%s %s\n", prefix, line))
 		}
 		sb.WriteString("\n")
-		sb.WriteString(styles.Muted.Render("↑↓ で移動  Enter で決定  Ctrl+C で終了"))
+		hint := "↑↓/j/k で選択  Ctrl+U/D で問題スクロール  Enter で決定"
+		sb.WriteString(styles.Muted.Render(hint))
 
 	case ai.QuestionTypeWritten:
 		sb.WriteString(styles.Border.Width(cw - 4).Render(m.textInput.View()))
 		sb.WriteString("\n")
-		sb.WriteString(styles.Muted.Render("Enter で送信  Ctrl+C で終了"))
+		hint := "Enter で送信  ↑↓ で問題スクロール  Ctrl+C で終了"
+		sb.WriteString(styles.Muted.Render(hint))
 	}
 
 	return sb.String()
 }
 
-// contentWidth は表示コンテンツの最大幅を返す。
-// 幅未取得時はデフォルト値を返す。
+// initQVP は問題文表示用 viewport を初期化（または再初期化）する。
+func (m *Model) initQVP() {
+	vpW := m.width - 2
+	if vpW < 20 {
+		vpW = 20
+	}
+
+	var fixedH int
+	if m.cq.Question.Type == ai.QuestionTypeChoice {
+		fixedH = quizHeaderH + quizSepLines + quizChoiceH
+	} else {
+		fixedH = quizHeaderH + quizSepLines + quizWrittenH
+	}
+
+	vpH := m.height - fixedH
+	if vpH < 3 {
+		vpH = 3
+	}
+
+	m.qvp = viewport.New(vpW, vpH)
+	m.qvp.SetContent(lipgloss.NewStyle().Width(vpW).Render(m.cq.Question.Body))
+	m.qvpReady = true
+}
+
+// contentWidth はフォールバック用のコンテンツ最大幅を返す。
 func (m Model) contentWidth() int {
 	if m.width <= 8 {
-		return 76 // デフォルト
+		return 76
 	}
 	return m.width - 4
 }

@@ -108,11 +108,15 @@ func (m Model) View() string {
 
 	// ---- スクロール領域（viewport）----
 	if !m.ready {
-		// WindowSizeMsg 到着前の一時表示
+		// WindowSizeMsg 到着前の一時表示（幅制限つき）
 		r := m.gradeRes.Result
 		if r.Explanation != "" {
+			fallbackW := m.width - 4
+			if fallbackW < 20 {
+				fallbackW = 76
+			}
 			sb.WriteString("\n")
-			sb.WriteString(r.Explanation)
+			sb.WriteString(lipgloss.NewStyle().Width(fallbackW).Render(r.Explanation))
 			sb.WriteString("\n")
 		}
 	} else {
