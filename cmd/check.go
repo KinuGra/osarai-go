@@ -6,19 +6,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	checkStaged   bool
-	checkFilePath string
-)
+var checkStaged bool
 
 var checkCmd = &cobra.Command{
 	Use:   "check [<file>]",
 	Short: "未コミット差分から AI 問題を生成してクイズを開始する",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) > 0 {
-			checkFilePath = args[0]
-		}
 		fmt.Println("TODO: check")
 		return nil
 	},
