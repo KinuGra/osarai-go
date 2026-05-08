@@ -42,6 +42,7 @@ type Question struct {
 	Body          string           `json:"body"`           // 問題文
 	Choices       []string         `json:"choices"`        // 選択肢（Type=choice の場合のみ）
 	CorrectAnswer string           `json:"correct_answer"` // 正解（choice: "A"〜"D", written: 模範解答）
+	Explanation   string           `json:"explanation"`    // 参考書テキスト風の解説（問題生成時に AI が同時出力）
 }
 
 // GenerateRequest は問題生成のリクエスト。
@@ -87,7 +88,7 @@ func (g *Generator) GenerateQuestions(ctx context.Context, req GenerateRequest) 
 		SystemPrompt: generateSystemPrompt,
 		UserPrompt:   buf.String(),
 		Temperature:  0.7,
-		MaxTokens:    4096,
+		MaxTokens:    8192,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("問題生成 API 呼び出し失敗: %w", err)

@@ -161,9 +161,18 @@ func (p *GeminiProvider) parseResponse(body []byte) (CompletionResponse, error) 
 		return CompletionResponse{}, apperror.ErrNoQuestionsGenerated
 	}
 
-	text := gemResp.Candidates[0].Content.Parts[0].Text
+	candidate := gemResp.Candidates[0]
+	text := candidate.Content.Parts[0].Text
 	if text == "" {
 		return CompletionResponse{}, apperror.ErrNoQuestionsGenerated
+	}
+
+	// 出力がトークン上限で途中切れになった場合は明示的なエラーを返す
+	if candidate.FinishReason == "MAX_TOKENS" {
+		return CompletionResponse{}, fmt.Errorf(
+			"Gemini API の出力がトークン上限に達したため応答が不完全です（FinishReason: MAX_TOKENS）。"+
+				"MaxOutputTokens を増やすか、プロンプトを短くしてください",
+		)
 	}
 
 	return CompletionResponse{Content: text}, nil
