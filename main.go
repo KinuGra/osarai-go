@@ -1,5 +1,7 @@
 package main
 
+import "github.com/KinuGra/osarai-go/cmd"
+
 func main() {
-	println("osarai: coming soon")
+	cmd.Execute()
 }
