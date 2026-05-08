@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/KinuGra/osarai-go/internal/ai"
 	"github.com/KinuGra/osarai-go/internal/core"
@@ -35,10 +36,12 @@ type Model struct {
 	// 問題番号表示用
 	current int // 1-based
 	total   int
+
+	width int // ターミナル幅（0 = 未取得）
 }
 
 // New は出題画面モデルを生成する。
-func New(cq core.CheckQuestion, current, total int) Model {
+func New(cq core.CheckQuestion, current, total, width int) Model {
 	ti := textinput.New()
 	ti.Placeholder = "ここに回答を入力..."
 	ti.CharLimit = 500
@@ -53,6 +56,7 @@ func New(cq core.CheckQuestion, current, total int) Model {
 		textInput: ti,
 		current:   current,
 		total:     total,
+		width:     width,
 	}
 }
 
@@ -65,6 +69,9 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		return m, nil
 	case tea.KeyMsg:
 		switch m.cq.Question.Type {
 		case ai.QuestionTypeChoice:
@@ -72,6 +79,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ai.QuestionTypeWritten:
 			return m.updateWritten(msg)
 		}
+	}
+	// ① KeyMsg 以外のメッセージ（BlinkMsg・FocusMsg 等）を記述式の textinput に転送する。
+	// textinput はカーソル点滅などで自身に BlinkMsg を送り続けるため、
+	// これを転送しないと入力が一切反応しなくなる。
+	if m.cq.Question.Type == ai.QuestionTypeWritten {
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -136,6 +151,9 @@ func (m Model) updateWritten(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	q := m.cq.Question
 
+	// ② コンテンツ幅を terminal 幅に合わせる
+	cw := m.contentWidth()
+
 	var sb strings.Builder
 
 	// ヘッダー: "Q2/5 [language] 選択式"
@@ -151,8 +169,8 @@ func (m Model) View() string {
 	sb.WriteString(styles.Title.Render(header))
 	sb.WriteString("\n\n")
 
-	// 問題文
-	sb.WriteString(q.Body)
+	// 問題文（長い場合に折り返す）
+	sb.WriteString(lipgloss.NewStyle().Width(cw).Render(q.Body))
 	sb.WriteString("\n\n")
 
 	// 選択肢 or テキスト入力
@@ -160,10 +178,10 @@ func (m Model) View() string {
 	case ai.QuestionTypeChoice:
 		for i, choice := range q.Choices {
 			prefix := "  "
-			line := choice
+			line := lipgloss.NewStyle().Width(cw - 4).Render(choice)
 			if i == m.cursor {
 				prefix = styles.Highlight.Render(" ❯")
-				line = styles.Highlight.Render(choice)
+				line = styles.Highlight.Render(lipgloss.NewStyle().Width(cw - 4).Render(choice))
 			}
 			sb.WriteString(fmt.Sprintf("%s %s\n", prefix, line))
 		}
@@ -171,12 +189,21 @@ func (m Model) View() string {
 		sb.WriteString(styles.Muted.Render("↑↓ で移動  Enter で決定  Ctrl+C で終了"))
 
 	case ai.QuestionTypeWritten:
-		sb.WriteString(styles.Border.Render(m.textInput.View()))
+		sb.WriteString(styles.Border.Width(cw - 4).Render(m.textInput.View()))
 		sb.WriteString("\n")
 		sb.WriteString(styles.Muted.Render("Enter で送信  Ctrl+C で終了"))
 	}
 
 	return sb.String()
+}
+
+// contentWidth は表示コンテンツの最大幅を返す。
+// 幅未取得時はデフォルト値を返す。
+func (m Model) contentWidth() int {
+	if m.width <= 8 {
+		return 76 // デフォルト
+	}
+	return m.width - 4
 }
 
 // choiceLabel は 0-based インデックスを "A"〜"D" に変換する。

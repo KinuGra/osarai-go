@@ -60,7 +60,7 @@ func runCheck(_ *cobra.Command, args []string) error {
 	svc := core.NewService(
 		core.WithStore(store),
 		core.WithGenerator(ai.NewGenerator(provider)),
-		// Grader は MVP フェーズでは注入しない（ローカル採点モックを使用）
+		core.WithGrader(ai.NewGrader(provider)), // ③ 記述式 AI 採点を有効化
 	)
 
 	// 4. オプション構築

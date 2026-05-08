@@ -19,14 +19,16 @@ type Model struct {
 	total        int
 	correctCount int
 	maxStreak    int
+	width        int
 }
 
 // New はサマリー画面モデルを生成する。
-func New(total, correctCount, maxStreak int) Model {
+func New(total, correctCount, maxStreak, width int) Model {
 	return Model{
 		total:        total,
 		correctCount: correctCount,
 		maxStreak:    maxStreak,
+		width:        width,
 	}
 }
 
@@ -34,6 +36,9 @@ func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter", " ", "q", "ctrl+c":

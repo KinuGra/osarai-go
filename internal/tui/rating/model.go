@@ -35,13 +35,15 @@ var options = []ratingOption{
 type Model struct {
 	dbAnswerID int64
 	cursor     int
+	width      int
 }
 
 // New は自己評価画面モデルを生成する。
-func New(dbAnswerID int64) Model {
+func New(dbAnswerID int64, width int) Model {
 	return Model{
 		dbAnswerID: dbAnswerID,
 		cursor:     2, // デフォルトは "Good"
+		width:      width,
 	}
 }
 
@@ -49,6 +51,9 @@ func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "up", "k":

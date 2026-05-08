@@ -43,6 +43,10 @@ type App struct {
 	maxStreak    int
 	currentModel tea.Model
 	lastErr      error
+
+	// ② ターミナルサイズ（WindowSizeMsg で更新）
+	width  int
+	height int
 }
 
 // NewApp は App を生成する。
@@ -52,8 +56,10 @@ func NewApp(service *core.Service, questions []core.CheckQuestion) *App {
 		service:   service,
 		ctx:       context.Background(),
 		questions: questions,
+		width:     80, // WindowSizeMsg 到着前のデフォルト
+		height:    24,
 	}
-	a.currentModel = quiz.New(questions[0], 1, len(questions))
+	a.currentModel = quiz.New(questions[0], 1, len(questions), a.width)
 	return a
 }
 
@@ -63,6 +69,14 @@ func (a *App) Init() tea.Cmd {
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	// ② ターミナルサイズを記録し、現在のサブモデルにも転送する
+	case tea.WindowSizeMsg:
+		a.width = msg.Width
+		a.height = msg.Height
+		var cmd tea.Cmd
+		a.currentModel, cmd = a.currentModel.Update(msg)
+		return a, cmd
 
 	// Ctrl+C はどの画面でも終了
 	case tea.KeyMsg:
@@ -86,12 +100,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.streak = 0
 		}
-		a.currentModel = result.New(msg.cq, msg.gradeRes, msg.userAnswer)
+		// ② width と height を渡して viewport を即時初期化
+		a.currentModel = result.New(msg.cq, msg.gradeRes, msg.userAnswer, a.width, a.height)
 		return a, a.currentModel.Init()
 
 	// 結果画面 → 自己評価画面へ
 	case result.ProceedMsg:
-		a.currentModel = rating.New(msg.DBAnswerID)
+		// ② width を渡す
+		a.currentModel = rating.New(msg.DBAnswerID, a.width)
 		return a, a.currentModel.Init()
 
 	// 自己評価選択 → 次の問題 or サマリーへ
@@ -152,12 +168,15 @@ func (a *App) gradeCmd(msg quiz.AnsweredMsg) tea.Cmd {
 func (a *App) advanceQuestion() {
 	a.currentIdx++
 	if a.currentIdx >= len(a.questions) {
-		a.currentModel = summary.New(len(a.questions), a.correctCount, a.maxStreak)
+		// ② width を渡す
+		a.currentModel = summary.New(len(a.questions), a.correctCount, a.maxStreak, a.width)
 	} else {
+		// ② width を渡す
 		a.currentModel = quiz.New(
 			a.questions[a.currentIdx],
 			a.currentIdx+1,
 			len(a.questions),
+			a.width,
 		)
 	}
 }
