@@ -1,6 +1,17 @@
 package ai
 
-import "context"
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"text/template"
+
+	_ "embed"
+
+	"github.com/KinuGra/osarai-go/internal/apperror"
+)
 
 // QuestionType は問題の種類。
 type QuestionType string
@@ -52,8 +63,62 @@ func NewGenerator(provider LLMProvider) *Generator {
 	return &Generator{provider: provider}
 }
 
+//go:embed prompts/generate_questions.tmpl
+var generateQuestionsTmplSrc string
+
+var generateQuestionsTmpl = template.Must(
+	template.New("generate_questions").Parse(generateQuestionsTmplSrc),
+)
+
+const generateSystemPrompt = "あなたはソフトウェアエンジニアの教育専門家です。\n" +
+	"git diff を読み、開発者の理解度チェック問題を JSON 配列で生成します。\n" +
+	"返答は純粋な JSON 配列のみにしてください。コードブロック（```）、説明文、前置き、後書きは一切不要です。\n" +
+	"最初の文字は \"[\" でなければなりません。"
+
 // GenerateQuestions は diff から問題を生成する。
-// TODO: 後続 Issue でプロンプトテンプレートを実装する。
+// テンプレートを適用してプロンプトを構築し、LLM に投げて JSON をパースして返す。
 func (g *Generator) GenerateQuestions(ctx context.Context, req GenerateRequest) ([]Question, error) {
-	panic("not implemented")
+	var buf bytes.Buffer
+	if err := generateQuestionsTmpl.Execute(&buf, req); err != nil {
+		return nil, fmt.Errorf("プロンプトテンプレートの適用に失敗: %w", err)
+	}
+
+	resp, err := g.provider.Complete(ctx, CompletionRequest{
+		SystemPrompt: generateSystemPrompt,
+		UserPrompt:   buf.String(),
+		Temperature:  0.7,
+		MaxTokens:    4096,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("問題生成 API 呼び出し失敗: %w", err)
+	}
+
+	content := cleanJSONResponse(resp.Content)
+
+	var questions []Question
+	if err := json.Unmarshal([]byte(content), &questions); err != nil {
+		return nil, fmt.Errorf("問題 JSON のパースに失敗: %w\nレスポンス（先頭200文字）: %.200s", err, content)
+	}
+
+	if len(questions) == 0 {
+		return nil, apperror.ErrNoQuestionsGenerated
+	}
+
+	return questions, nil
+}
+
+// cleanJSONResponse は LLM レスポンスからコードブロックや余分な空白を取り除く。
+func cleanJSONResponse(s string) string {
+	s = strings.TrimSpace(s)
+	// ```json ... ``` or ``` ... ``` を除去
+	if strings.HasPrefix(s, "```") {
+		// 最初の改行まで読み飛ばす
+		idx := strings.Index(s, "\n")
+		if idx >= 0 {
+			s = s[idx+1:]
+		}
+		// 末尾の ``` を除去
+		s = strings.TrimSuffix(strings.TrimSpace(s), "```")
+	}
+	return strings.TrimSpace(s)
 }

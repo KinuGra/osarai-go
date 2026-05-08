@@ -86,12 +86,12 @@ type sqlStore struct {
 
 func (s *sqlStore) Repositories() RepositoryStore { return s.repositories }
 func (s *sqlStore) Commits() CommitStore          { return s.commits }
-func (s *sqlStore) Sessions() SessionStore         { return s.sessions }
-func (s *sqlStore) Questions() QuestionStore       { return s.questions }
-func (s *sqlStore) Answers() AnswerStore           { return s.answers }
-func (s *sqlStore) Reviews() ReviewStore           { return s.reviews }
-func (s *sqlStore) ReviewLogs() ReviewLogStore     { return s.reviewLogs }
-func (s *sqlStore) Close() error                   { return s.db.Close() }
+func (s *sqlStore) Sessions() SessionStore        { return s.sessions }
+func (s *sqlStore) Questions() QuestionStore      { return s.questions }
+func (s *sqlStore) Answers() AnswerStore          { return s.answers }
+func (s *sqlStore) Reviews() ReviewStore          { return s.reviews }
+func (s *sqlStore) ReviewLogs() ReviewLogStore    { return s.reviewLogs }
+func (s *sqlStore) Close() error                  { return s.db.Close() }
 
 func migrate(db *sql.DB) error {
 	var version int
