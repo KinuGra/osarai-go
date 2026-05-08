@@ -65,8 +65,13 @@ type geminiPart struct {
 }
 
 type geminiGenerationConfig struct {
-	Temperature     float64 `json:"temperature"`
-	MaxOutputTokens int     `json:"maxOutputTokens"`
+	Temperature     float64               `json:"temperature"`
+	MaxOutputTokens int                   `json:"maxOutputTokens"`
+	ThinkingConfig  *geminiThinkingConfig `json:"thinkingConfig,omitempty"`
+}
+
+type geminiThinkingConfig struct {
+	ThinkingBudget int `json:"thinkingBudget"`
 }
 
 type geminiResponse struct {
@@ -137,6 +142,7 @@ func (p *GeminiProvider) buildRequestBody(req CompletionRequest) ([]byte, error)
 		GenerationConfig: geminiGenerationConfig{
 			Temperature:     req.Temperature,
 			MaxOutputTokens: maxTokens,
+			ThinkingConfig:  &geminiThinkingConfig{ThinkingBudget: 0},
 		},
 	}
 
