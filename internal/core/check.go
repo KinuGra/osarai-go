@@ -97,6 +97,10 @@ func (s *Service) runCheck(ctx context.Context, opts CheckOptions) ([]CheckQuest
 			choicesJSON = string(b)
 		}
 
+		var explanationPtr *string
+		if q.Explanation != "" {
+			explanationPtr = &q.Explanation
+		}
 		dbQ := &db.Question{
 			SessionID:     session.ID,
 			CommitID:      nil, // 未コミット差分なので NULL
@@ -106,6 +110,7 @@ func (s *Service) runCheck(ctx context.Context, opts CheckOptions) ([]CheckQuest
 			Body:          q.Body,
 			Choices:       choicesJSON,
 			CorrectAnswer: q.CorrectAnswer,
+			Explanation:   explanationPtr,
 			DiffContext:   &diffCtx,
 			SortOrder:     i,
 		}

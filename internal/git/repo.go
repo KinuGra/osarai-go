@@ -30,3 +30,4 @@ func DetectRepo() (*Repo, error) {
 	name := filepath.Base(path)
 	return &Repo{Path: path, Name: name}, nil
 }
+// test change

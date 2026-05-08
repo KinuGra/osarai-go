@@ -47,6 +47,7 @@ type Question struct {
 	Body          string
 	Choices       string // JSON 配列
 	CorrectAnswer string
+	Explanation   *string // AI が生成した問題解説
 	DiffContext   *string // 問題生成に使った diff 断片
 	SortOrder     int
 	CreatedAt     time.Time

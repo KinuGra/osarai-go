@@ -79,10 +79,7 @@ func (s *Service) gradeAnswer(ctx context.Context, req GradeAnswerRequest) (Grad
 func gradeLocally(q ai.Question, userAnswer string) ai.GradeResult {
 	if q.Type == ai.QuestionTypeChoice {
 		isCorrect := q.CorrectAnswer == userAnswer
-		explanation := fmt.Sprintf(
-			"正解は **%s** です。\n\n模範解答: %s",
-			q.CorrectAnswer, q.CorrectAnswer,
-		)
+		explanation := buildLocalExplanation(q)
 		return ai.GradeResult{
 			IsCorrect:   &isCorrect,
 			Explanation: explanation,
@@ -90,14 +87,30 @@ func gradeLocally(q ai.Question, userAnswer string) ai.GradeResult {
 		}
 	}
 
-	// 記述式: MVP では常に「採点中」として扱い、模範解答を表示
+	// 記述式: MVP では常に「採点中」として扱い、模範解答と解説を表示
 	isCorrect := true
-	explanation := fmt.Sprintf("模範解答:\n\n%s", q.CorrectAnswer)
+	explanation := buildLocalExplanation(q)
 	return ai.GradeResult{
 		IsCorrect:   &isCorrect,
 		Explanation: explanation,
 		GradeStatus: ai.GradeStatusLocalOnly,
 	}
+}
+
+// buildLocalExplanation は問題の解説文を構築する。
+// AI が生成した explanation があればそれを使い、なければ模範解答のみを表示する。
+func buildLocalExplanation(q ai.Question) string {
+	if q.Explanation != "" {
+		if q.Type == ai.QuestionTypeChoice {
+			return fmt.Sprintf("正解は **%s** です。\n\n%s", q.CorrectAnswer, q.Explanation)
+		}
+		return fmt.Sprintf("模範解答:\n\n%s\n\n---\n\n%s", q.CorrectAnswer, q.Explanation)
+	}
+	// フォールバック（explanation が空の場合）
+	if q.Type == ai.QuestionTypeChoice {
+		return fmt.Sprintf("正解は **%s** です。", q.CorrectAnswer)
+	}
+	return fmt.Sprintf("模範解答:\n\n%s", q.CorrectAnswer)
 }
 
 // buildAnswer は GradeResult から db.Answer を構築する。

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 
 	"github.com/KinuGra/osarai-go/internal/apperror"
@@ -81,14 +82,20 @@ func ensureConfigFile(dir string) error {
 // Load は設定ファイルを読み込んで Config を返す。
 //
 // 優先順位（高い方が勝つ）:
-//  1. 環境変数（GEMINI_API_KEY）
-//  2. ~/.osarai/config.toml
-//  3. go:embed のデフォルト値
+//  1. 既にセットされているシェルの環境変数
+//  2. カレントディレクトリの .env ファイル
+//  3. ~/.osarai/.env ファイル
+//  4. ~/.osarai/config.toml
+//  5. go:embed のデフォルト値
 func Load() (*Config, error) {
 	dir, err := configDir()
 	if err != nil {
 		return nil, err
 	}
+
+	// .env を自動ロード（ファイルが存在しない場合は無視）
+	// overload=false: シェルで既にセットされている変数は上書きしない
+	loadDotEnv(dir)
 
 	// config.toml がなければデフォルトから作成
 	if err := ensureConfigFile(dir); err != nil {
@@ -124,6 +131,21 @@ func Load() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// loadDotEnv は .env ファイルを探して環境変数にロードする。
+//
+// 探索順（後が低優先）:
+//  1. カレントディレクトリ / .env
+//  2. ~/.osarai/.env（全プロジェクト共通の API キー置き場）
+//
+// godotenv.Load は既存の環境変数を上書きしない（シェルの export が常に勝つ）。
+// ファイルが見つからない場合や読み込めない場合は静かに無視する。
+func loadDotEnv(osaraDir string) {
+	// カレントディレクトリの .env を優先
+	_ = godotenv.Load(".env")
+	// グローバルの ~/.osarai/.env をフォールバックとして読む
+	_ = godotenv.Load(filepath.Join(osaraDir, ".env"))
 }
 
 // APIKey は Gemini API キーを返す。未設定なら ErrAPIKeyMissing を返す。
