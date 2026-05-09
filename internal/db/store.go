@@ -40,13 +40,14 @@ type Session struct {
 type Question struct {
 	ID            int64
 	SessionID     int64
-	CommitID      *int64  // nil = 未コミット diff から生成
+	CommitID      *int64 // nil = 未コミット diff から生成
 	Title         string
-	Category      string  // "design" | "language" | "framework"
-	QuestionType  string  // "choice" | "written"
+	Category      string // "design" | "language" | "framework"
+	QuestionType  string // "choice" | "written"
 	Body          string
-	Choices       string  // JSON 配列
+	Choices       string // JSON 配列
 	CorrectAnswer string
+	Explanation   *string // AI が生成した問題解説
 	DiffContext   *string // 問題生成に使った diff 断片
 	SortOrder     int
 	CreatedAt     time.Time

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/KinuGra/osarai-go/internal/apperror"
@@ -65,8 +66,13 @@ type geminiPart struct {
 }
 
 type geminiGenerationConfig struct {
-	Temperature     float64 `json:"temperature"`
-	MaxOutputTokens int     `json:"maxOutputTokens"`
+	Temperature     float64               `json:"temperature"`
+	MaxOutputTokens int                   `json:"maxOutputTokens"`
+	ThinkingConfig  *geminiThinkingConfig `json:"thinkingConfig,omitempty"`
+}
+
+type geminiThinkingConfig struct {
+	ThinkingBudget int `json:"thinkingBudget"`
 }
 
 type geminiResponse struct {
@@ -86,6 +92,15 @@ type geminiErrorResponse struct {
 		Message string `json:"message"`
 		Status  string `json:"status"`
 	} `json:"error"`
+}
+
+// thinkingConfig は thinking 対応モデル（gemini-2.5-* / *-thinking）のみ
+// ThinkingBudget: 0 を返し、非対応モデルでは nil を返す（omitempty で JSON から除外される）。
+func (p *GeminiProvider) thinkingConfig() *geminiThinkingConfig {
+	if strings.Contains(p.model, "2.5") || strings.Contains(p.model, "thinking") {
+		return &geminiThinkingConfig{ThinkingBudget: 0}
+	}
+	return nil
 }
 
 // Complete は Gemini API にプロンプトを送り、テキストレスポンスを返す。
@@ -137,6 +152,7 @@ func (p *GeminiProvider) buildRequestBody(req CompletionRequest) ([]byte, error)
 		GenerationConfig: geminiGenerationConfig{
 			Temperature:     req.Temperature,
 			MaxOutputTokens: maxTokens,
+			ThinkingConfig:  p.thinkingConfig(),
 		},
 	}
 
@@ -161,9 +177,18 @@ func (p *GeminiProvider) parseResponse(body []byte) (CompletionResponse, error) 
 		return CompletionResponse{}, apperror.ErrNoQuestionsGenerated
 	}
 
-	text := gemResp.Candidates[0].Content.Parts[0].Text
+	candidate := gemResp.Candidates[0]
+	text := candidate.Content.Parts[0].Text
 	if text == "" {
 		return CompletionResponse{}, apperror.ErrNoQuestionsGenerated
+	}
+
+	// 出力がトークン上限で途中切れになった場合は明示的なエラーを返す
+	if candidate.FinishReason == "MAX_TOKENS" {
+		return CompletionResponse{}, fmt.Errorf(
+			"Gemini API の出力がトークン上限に達したため応答が不完全です（FinishReason: MAX_TOKENS）。"+
+				"MaxOutputTokens を増やすか、プロンプトを短くしてください",
+		)
 	}
 
 	return CompletionResponse{Content: text}, nil

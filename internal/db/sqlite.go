@@ -11,7 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const currentSchemaVersion = 1
+const currentSchemaVersion = 2
 
 // Open opens (or creates) ~/.osarai/data.db and returns a Store.
 func Open() (Store, error) {
@@ -86,12 +86,12 @@ type sqlStore struct {
 
 func (s *sqlStore) Repositories() RepositoryStore { return s.repositories }
 func (s *sqlStore) Commits() CommitStore          { return s.commits }
-func (s *sqlStore) Sessions() SessionStore         { return s.sessions }
-func (s *sqlStore) Questions() QuestionStore       { return s.questions }
-func (s *sqlStore) Answers() AnswerStore           { return s.answers }
-func (s *sqlStore) Reviews() ReviewStore           { return s.reviews }
-func (s *sqlStore) ReviewLogs() ReviewLogStore     { return s.reviewLogs }
-func (s *sqlStore) Close() error                   { return s.db.Close() }
+func (s *sqlStore) Sessions() SessionStore        { return s.sessions }
+func (s *sqlStore) Questions() QuestionStore      { return s.questions }
+func (s *sqlStore) Answers() AnswerStore          { return s.answers }
+func (s *sqlStore) Reviews() ReviewStore          { return s.reviews }
+func (s *sqlStore) ReviewLogs() ReviewLogStore    { return s.reviewLogs }
+func (s *sqlStore) Close() error                  { return s.db.Close() }
 
 func migrate(db *sql.DB) error {
 	var version int
@@ -101,23 +101,52 @@ func migrate(db *sql.DB) error {
 	if version >= currentSchemaVersion {
 		return nil
 	}
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin migration tx: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
 
-	if err := createTables(tx); err != nil {
-		return err
+	// v0 → v1: 全テーブル・インデックスの初期作成
+	if version < 1 {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin migration v1 tx: %w", err)
+		}
+		defer tx.Rollback() //nolint:errcheck
+
+		if err := createTables(tx); err != nil {
+			return err
+		}
+		if err := createIndexes(tx); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("PRAGMA user_version = 1"); err != nil {
+			return fmt.Errorf("set user_version=1: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration v1: %w", err)
+		}
+		version = 1
 	}
-	if err := createIndexes(tx); err != nil {
-		return err
+
+	// v1 → v2: questions テーブルに explanation カラムを追加
+	if version < 2 {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin migration v2 tx: %w", err)
+		}
+		defer tx.Rollback() //nolint:errcheck
+
+		if _, err := tx.Exec(`ALTER TABLE questions ADD COLUMN explanation TEXT`); err != nil {
+			return fmt.Errorf("add questions.explanation: %w", err)
+		}
+		if _, err := tx.Exec("PRAGMA user_version = 2"); err != nil {
+			return fmt.Errorf("set user_version=2: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration v2: %w", err)
+		}
 	}
-	if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", currentSchemaVersion)); err != nil {
-		return fmt.Errorf("set user_version: %w", err)
-	}
-	return tx.Commit()
+
+	return nil
 }
+
 
 func createTables(tx *sql.Tx) error {
 	for _, stmt := range []string{

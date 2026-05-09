@@ -124,24 +124,24 @@ type Stats struct {
 	MaxStreak      int // 連続正解数の最大値
 }
 
-// ---- フローメソッド（スタブ） ----
+// ---- フローメソッド ----
 
-// RunCheck は未コミット差分から問題を生成して返す。
-// TODO: core/check.go で実装する。
-func (s *Service) RunCheck(ctx context.Context, opts CheckOptions) ([]ai.Question, error) {
-	panic("not implemented")
+// RunCheck は未コミット差分から問題を生成して DB に保存し、[]CheckQuestion を返す。
+// 実装は core/check.go の runCheck に委譲する。
+func (s *Service) RunCheck(ctx context.Context, opts CheckOptions) ([]CheckQuestion, error) {
+	return s.runCheck(ctx, opts)
 }
 
 // RunRecall は SM-2 復習対象 + 未振り返りコミットから問題を生成して返す。
 // TODO: core/recall.go で実装する。
-func (s *Service) RunRecall(ctx context.Context, opts RecallOptions) ([]ai.Question, error) {
+func (s *Service) RunRecall(ctx context.Context, opts RecallOptions) ([]CheckQuestion, error) {
 	panic("not implemented")
 }
 
 // GradeAnswer はユーザーの回答を採点し、DB に保存して結果を返す。
-// TODO: core/grading.go で実装する。
-func (s *Service) GradeAnswer(ctx context.Context, req ai.GradeRequest) (ai.GradeResult, error) {
-	panic("not implemented")
+// 実装は core/grading.go の gradeAnswer に委譲する。
+func (s *Service) GradeAnswer(ctx context.Context, req GradeAnswerRequest) (GradeAnswerResult, error) {
+	return s.gradeAnswer(ctx, req)
 }
 
 // GetStats は学習統計を集計して返す。
