@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/KinuGra/osarai-go/internal/core"
+	"github.com/KinuGra/osarai-go/internal/tui/components/confirm"
 	"github.com/KinuGra/osarai-go/internal/tui/quiz"
 	"github.com/KinuGra/osarai-go/internal/tui/rating"
 	"github.com/KinuGra/osarai-go/internal/tui/result"
@@ -17,22 +18,20 @@ import (
 	"github.com/KinuGra/osarai-go/internal/tui/summary"
 )
 
-// ---- 内部メッセージ型（app.go 内でのみ使用）----
+// ---- 内部メッセージ型 ----
 
-// gradedMsg は採点完了後に app.Update へ届く内部メッセージ。
 type gradedMsg struct {
 	cq         core.CheckQuestion
 	gradeRes   core.GradeAnswerResult
 	userAnswer string
 }
 
-// errMsg はエラー発生時に app.Update へ届く内部メッセージ。
+type ratingDoneMsg struct{}
+
 type errMsg struct{ err error }
 
 // ---- App モデル ----
 
-// App は TUI のルートモデル。画面遷移ルーターとして機能する。
-// core.Service を保持し、採点・SM-2 保存などのビジネスロジック呼び出しを行う。
 type App struct {
 	service      *core.Service
 	ctx          context.Context
@@ -44,22 +43,21 @@ type App struct {
 	currentModel tea.Model
 	lastErr      error
 
-	// ② ターミナルサイズ（WindowSizeMsg で更新）
 	width  int
 	height int
 
-	// ① 採点中フラグ: true の間は AnsweredMsg を無視して二重採点・UNIQUE 違反を防ぐ
-	grading bool
+	grading bool // 採点中フラグ（二重採点防止）
+
+	// 直前の採点結果（confirm ダイアログ用）
+	lastGradedMsg *gradedMsg
 }
 
-// NewApp は App を生成する。
-// questions は Service.RunCheck() で取得済みの問題リスト。
 func NewApp(service *core.Service, questions []core.CheckQuestion) *App {
 	a := &App{
 		service:   service,
 		ctx:       context.Background(),
 		questions: questions,
-		width:     80, // WindowSizeMsg 到着前のデフォルト
+		width:     80,
 		height:    24,
 	}
 	a.currentModel = quiz.New(questions[0], 1, len(questions), a.width, a.height)
@@ -73,7 +71,6 @@ func (a *App) Init() tea.Cmd {
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
-	// ② ターミナルサイズを記録し、現在のサブモデルにも転送する
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
@@ -81,25 +78,26 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.currentModel, cmd = a.currentModel.Update(msg)
 		return a, cmd
 
-	// Ctrl+C はどの画面でも終了
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return a, tea.Quit
 		}
 
-	// quiz → 採点（非同期 Cmd）
-	// ① 採点中の再送信は無視（Enter 連打による UNIQUE 制約違反を防ぐ）
+	// quiz → 採点
 	case quiz.AnsweredMsg:
 		if a.grading {
 			return a, nil
 		}
 		a.grading = true
+		cq := a.questions[a.currentIdx]
+		if cq.IsRecallReview {
+			return a, a.gradeRecallCmd(msg, cq)
+		}
 		return a, a.gradeCmd(msg)
 
-	// 採点完了 → 結果画面へ
+	// 採点完了 → 結果画面
 	case gradedMsg:
 		a.grading = false
-		// 正解・連続正解カウントを更新
 		if msg.gradeRes.Result.IsCorrect != nil && *msg.gradeRes.Result.IsCorrect {
 			a.correctCount++
 			a.streak++
@@ -109,30 +107,44 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.streak = 0
 		}
-		// ② width と height を渡して viewport を即時初期化
+		a.lastGradedMsg = &msg
 		a.currentModel = result.New(msg.cq, msg.gradeRes, msg.userAnswer, a.width, a.height)
 		return a, a.currentModel.Init()
 
-	// 結果画面 → 自己評価画面へ
+	// 結果画面 → 自己評価画面
 	case result.ProceedMsg:
-		// ② width を渡す
 		a.currentModel = rating.New(msg.DBAnswerID, a.width)
 		return a, a.currentModel.Init()
 
-	// 自己評価選択 → 次の問題 or サマリーへ
+	// 自己評価選択 → SM-2 保存 → confirm ダイアログ
 	case rating.SelectedMsg:
-		// TODO: ReviewLog を DB に保存（recall 実装 Issue で追加）
+		return a, a.saveRatingCmd(msg)
+
+	// SM-2 保存完了 → confirm ダイアログ（md 保存確認）
+	case ratingDoneMsg:
+		a.currentModel = confirm.New("md に保存しますか？", "保存する", "あとで", a.width)
+		return a, a.currentModel.Init()
+
+	// confirm 選択 → （保存 or スキップ）→ 次の問題
+	case confirm.ConfirmedMsg:
+		if msg.Yes && a.lastGradedMsg != nil {
+			go func() {
+				_, _ = a.service.ExportAnswer(
+					a.ctx,
+					a.lastGradedMsg.gradeRes.DBAnswerID,
+					"",
+				)
+			}()
+		}
 		a.advanceQuestion()
 		return a, a.currentModel.Init()
 
-	// エラー表示（採点失敗など）
 	case errMsg:
 		a.grading = false
 		a.lastErr = msg.err
 		return a, nil
 	}
 
-	// 現在のサブモデルに委譲
 	var cmd tea.Cmd
 	a.currentModel, cmd = a.currentModel.Update(msg)
 	return a, cmd
@@ -146,7 +158,7 @@ func (a *App) View() string {
 	return a.currentModel.View()
 }
 
-// gradeCmd は採点を非同期 tea.Cmd として実行する。
+// gradeCmd は通常の採点（新規回答を DB に保存）を非同期で実行する。
 func (a *App) gradeCmd(msg quiz.AnsweredMsg) tea.Cmd {
 	return func() tea.Msg {
 		res, err := a.service.GradeAnswer(a.ctx, core.GradeAnswerRequest{
@@ -158,7 +170,6 @@ func (a *App) gradeCmd(msg quiz.AnsweredMsg) tea.Cmd {
 		if err != nil {
 			return errMsg{err: fmt.Errorf("採点に失敗しました: %w", err)}
 		}
-		// 送信された問題 ID に対応する CheckQuestion を探す
 		var cq core.CheckQuestion
 		for _, q := range a.questions {
 			if q.DBQuestionID == msg.DBQuestionID {
@@ -166,11 +177,37 @@ func (a *App) gradeCmd(msg quiz.AnsweredMsg) tea.Cmd {
 				break
 			}
 		}
-		return gradedMsg{
-			cq:         cq,
-			gradeRes:   res,
-			userAnswer: msg.UserAnswer,
+		return gradedMsg{cq: cq, gradeRes: res, userAnswer: msg.UserAnswer}
+	}
+}
+
+// gradeRecallCmd は SM-2 復習アイテムのローカル採点を非同期で実行する。
+// 新しい DB 回答は作らず、既存の解説を使う。
+func (a *App) gradeRecallCmd(msg quiz.AnsweredMsg, cq core.CheckQuestion) tea.Cmd {
+	return func() tea.Msg {
+		res, err := a.service.GradeAnswerForRecall(a.ctx, core.GradeAnswerRequest{
+			DBQuestionID:     msg.DBQuestionID,
+			Question:         msg.Question,
+			UserAnswer:       msg.UserAnswer,
+			DiffContext:      msg.DiffContext,
+			ExistingAnswerID: cq.ExistingAnswerID,
+			ExistingResult:   cq.ExistingResult,
+		})
+		if err != nil {
+			return errMsg{err: fmt.Errorf("採点に失敗しました: %w", err)}
 		}
+		return gradedMsg{cq: cq, gradeRes: res, userAnswer: msg.UserAnswer}
+	}
+}
+
+// saveRatingCmd は SM-2 自己評価を DB に保存する非同期コマンド。
+func (a *App) saveRatingCmd(msg rating.SelectedMsg) tea.Cmd {
+	return func() tea.Msg {
+		_ = a.service.SaveRating(a.ctx, core.SaveRatingRequest{
+			DBAnswerID: msg.DBAnswerID,
+			Rating:     msg.Rating,
+		})
+		return ratingDoneMsg{}
 	}
 }
 
@@ -178,10 +215,8 @@ func (a *App) gradeCmd(msg quiz.AnsweredMsg) tea.Cmd {
 func (a *App) advanceQuestion() {
 	a.currentIdx++
 	if a.currentIdx >= len(a.questions) {
-		// ② width を渡す
 		a.currentModel = summary.New(len(a.questions), a.correctCount, a.maxStreak, a.width)
 	} else {
-		// ② width を渡す
 		a.currentModel = quiz.New(
 			a.questions[a.currentIdx],
 			a.currentIdx+1,
