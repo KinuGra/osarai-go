@@ -172,9 +172,11 @@ func TestViewRenders(t *testing.T) {
 }
 
 // TestWindowSizeMsgUpdatesViewport は WindowSizeMsg で viewport が再初期化されることを確認する。
+// 適応型 viewport では短い問題文の場合は行数が変わらないため高さは変化しないが、
+// 幅は端末幅に合わせて必ず更新される。
 func TestWindowSizeMsgUpdatesViewport(t *testing.T) {
 	m := New(makeChoiceQuestion(), 1, 5, 80, 24)
-	oldH := m.qvp.Height
+	oldW := m.qvp.Width
 
 	m2, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 60})
 	m = m2.(Model)
@@ -182,8 +184,8 @@ func TestWindowSizeMsgUpdatesViewport(t *testing.T) {
 	if m.width != 200 {
 		t.Errorf("width が更新されていない: got %d, want 200", m.width)
 	}
-	if m.qvp.Height == oldH {
-		t.Error("WindowSizeMsg 後、viewport 高さが変わっていない")
+	if m.qvp.Width == oldW {
+		t.Error("WindowSizeMsg 後、viewport 幅が変わっていない")
 	}
 }
 

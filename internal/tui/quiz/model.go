@@ -217,12 +217,6 @@ func (m Model) View() string {
 	// ── 問題文（viewport or フォールバック）──
 	if m.qvpReady {
 		sb.WriteString(m.qvp.View())
-		// スクロール可能なら % 表示
-		if m.qvp.TotalLineCount() > m.qvp.Height {
-			pct := int(m.qvp.ScrollPercent() * 100)
-			sb.WriteString("\n")
-			sb.WriteString(styles.Muted.Render(fmt.Sprintf("── 問題 %d%% ──", pct)))
-		}
 	} else {
 		sb.WriteString(lipgloss.NewStyle().Width(cw).Render(q.Body))
 	}
@@ -255,6 +249,8 @@ func (m Model) View() string {
 }
 
 // initQVP は問題文表示用 viewport を初期化（または再初期化）する。
+// viewport の高さは word-wrap 後の実際の行数と端末の余白から小さい方を採用する。
+// 問題文が短い場合は viewport がぴったりのサイズになり、選択肢・入力欄が直下に続く。
 func (m *Model) initQVP() {
 	vpW := m.width - 2
 	if vpW < 20 {
@@ -268,13 +264,21 @@ func (m *Model) initQVP() {
 		fixedH = quizHeaderH + quizSepLines + quizWrittenH
 	}
 
-	vpH := m.height - fixedH
-	if vpH < 3 {
-		vpH = 3
+	maxVpH := m.height - fixedH
+	if maxVpH < 3 {
+		maxVpH = 3
+	}
+
+	// word-wrap 後の実際の行数を求め、それを超えない範囲で viewport を確保する
+	content := lipgloss.NewStyle().Width(vpW).Render(m.cq.Question.Body)
+	actualLines := strings.Count(content, "\n") + 1
+	vpH := actualLines
+	if vpH > maxVpH {
+		vpH = maxVpH
 	}
 
 	m.qvp = viewport.New(vpW, vpH)
-	m.qvp.SetContent(lipgloss.NewStyle().Width(vpW).Render(m.cq.Question.Body))
+	m.qvp.SetContent(content)
 	m.qvpReady = true
 }
 
