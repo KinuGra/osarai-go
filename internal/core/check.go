@@ -20,6 +20,11 @@ type CheckQuestion struct {
 	DBSessionID  int64
 	Question     ai.Question
 	DiffContext  string // diff の断片（採点時の文脈用）
+
+	// recall SM-2 アイテム用フィールド（check では使用しない）
+	IsRecallReview   bool            // true = SM-2 復習アイテム（既存回答が存在）
+	ExistingAnswerID int64           // SM-2 アイテムの既存回答 ID
+	ExistingResult   *GradeAnswerResult // SM-2 アイテムの既存採点結果
 }
 
 // runCheck は未コミット差分から問題を生成して DB に保存し、[]CheckQuestion を返す。

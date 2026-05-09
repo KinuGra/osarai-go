@@ -28,6 +28,33 @@ func (s *reviewStore) Create(review *Review) error {
 	return nil
 }
 
+func (s *reviewStore) FindByAnswerID(answerID int64) (*Review, error) {
+	row := s.db.QueryRow(
+		`SELECT id, answer_id, ease_factor, interval_days, repetitions, next_review_at, updated_at
+		 FROM reviews WHERE answer_id = ?`,
+		answerID,
+	)
+	var r Review
+	var nextReviewAt, updatedAt []byte
+	if err := row.Scan(
+		&r.ID, &r.AnswerID, &r.EaseFactor, &r.IntervalDays,
+		&r.Repetitions, &nextReviewAt, &updatedAt,
+	); err != nil {
+		return nil, fmt.Errorf("review find by answer id: %w", err)
+	}
+	t, err := parseTime(nextReviewAt)
+	if err != nil {
+		return nil, fmt.Errorf("review parse next_review_at: %w", err)
+	}
+	r.NextReviewAt = t
+	t, err = parseTime(updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("review parse updated_at: %w", err)
+	}
+	r.UpdatedAt = t
+	return &r, nil
+}
+
 func (s *reviewStore) FindDue(now time.Time) ([]Review, error) {
 	rows, err := s.db.Query(
 		`SELECT id, answer_id, ease_factor, interval_days, repetitions, next_review_at, updated_at
@@ -38,7 +65,7 @@ func (s *reviewStore) FindDue(now time.Time) ([]Review, error) {
 	if err != nil {
 		return nil, fmt.Errorf("review find due: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	return scanReviews(rows)
 }
 

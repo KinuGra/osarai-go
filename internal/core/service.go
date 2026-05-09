@@ -28,7 +28,6 @@ type Service struct {
 type Option func(*Service)
 
 // WithStore は db.Store（複合インターフェース）から全 Store を一括設定する。
-// 個別 WithXxxStore と組み合わせる場合、後から呼んだ方が優先される。
 func WithStore(s db.Store) Option {
 	return func(svc *Service) {
 		svc.questionStore = s.Questions()
@@ -78,15 +77,6 @@ func WithGrader(g *ai.Grader) Option {
 }
 
 // NewService は Functional Options パターンで Service を生成する。
-//
-// 使用例:
-//
-//	provider, _ := ai.NewGeminiProvider(apiKey, "")
-//	svc := core.NewService(
-//	    core.WithStore(sqliteStore),
-//	    core.WithGenerator(ai.NewGenerator(provider)),
-//	    core.WithGrader(ai.NewGrader(provider)),
-//	)
 func NewService(opts ...Option) *Service {
 	svc := &Service{}
 	for _, opt := range opts {
@@ -99,65 +89,95 @@ func NewService(opts ...Option) *Service {
 
 // CheckOptions は `osarai check` コマンドのオプション。
 type CheckOptions struct {
-	Staged   bool   // --staged: ステージ済みの差分のみ対象
-	FilePath string // <file>: 特定ファイルのみ対象（空文字 = 全体）
+	Staged   bool
+	FilePath string
 }
 
 // RecallOptions は `osarai recall` コマンドのオプション。
 type RecallOptions struct {
-	RepoName   string // --repo: 特定リポジトリに絞り込む（空文字 = 全リポ）
-	NewOnly    bool   // --new: 未振り返りコミットのみ
-	ReviewOnly bool   // --review: SM-2 復習分のみ
+	RepoName   string
+	NewOnly    bool
+	ReviewOnly bool
 }
 
 // ExportOptions は `osarai export` コマンドのオプション。
 type ExportOptions struct {
-	OutputDir string // エクスポート先ディレクトリ（空文字 = config のデフォルト）
+	OutputDir string
 }
 
 // Stats は学習統計データ。
 type Stats struct {
-	TotalSessions  int
 	TotalQuestions int
 	CorrectAnswers int
-	StudyDayStreak int // 連続学習日数
-	MaxStreak      int // 連続正解数の最大値
+	DueReviews     int // 今日の SM-2 復習対象数
+	RetryableCount int // 再採点対象数
 }
 
 // ---- フローメソッド ----
 
 // RunCheck は未コミット差分から問題を生成して DB に保存し、[]CheckQuestion を返す。
-// 実装は core/check.go の runCheck に委譲する。
 func (s *Service) RunCheck(ctx context.Context, opts CheckOptions) ([]CheckQuestion, error) {
 	return s.runCheck(ctx, opts)
 }
 
-// RunRecall は SM-2 復習対象 + 未振り返りコミットから問題を生成して返す。
-// TODO: core/recall.go で実装する。
+// RunRecall は SM-2 復習対象 + 未振り返りコミットから問題を返す。
 func (s *Service) RunRecall(ctx context.Context, opts RecallOptions) ([]CheckQuestion, error) {
-	panic("not implemented")
+	return s.runRecall(ctx, opts)
 }
 
 // GradeAnswer はユーザーの回答を採点し、DB に保存して結果を返す。
-// 実装は core/grading.go の gradeAnswer に委譲する。
 func (s *Service) GradeAnswer(ctx context.Context, req GradeAnswerRequest) (GradeAnswerResult, error) {
 	return s.gradeAnswer(ctx, req)
 }
 
+// GradeAnswerForRecall は SM-2 復習アイテムのローカル採点を行う（新しい DB 回答は作らない）。
+func (s *Service) GradeAnswerForRecall(_ context.Context, req GradeAnswerRequest) (GradeAnswerResult, error) {
+	result := gradeLocally(req.Question, req.UserAnswer)
+	// 既存回答の解説で上書き（AI 解説が保存されていれば使う）
+	if req.ExistingResult != nil && req.ExistingResult.Result.Explanation != "" {
+		result.Explanation = req.ExistingResult.Result.Explanation
+	}
+	return GradeAnswerResult{
+		DBAnswerID: req.ExistingAnswerID,
+		Result:     result,
+	}, nil
+}
+
+// SaveRating は SM-2 自己評価を保存して review を更新する。
+func (s *Service) SaveRating(ctx context.Context, req SaveRatingRequest) error {
+	return s.saveRating(ctx, req)
+}
+
 // GetStats は学習統計を集計して返す。
-// TODO: core/stats.go で実装する。
 func (s *Service) GetStats(ctx context.Context) (Stats, error) {
-	panic("not implemented")
+	return s.getStats(ctx)
 }
 
 // Export は保存済み問題を md ファイルにエクスポートする。
-// TODO: core/export.go で実装する。
 func (s *Service) Export(ctx context.Context, opts ExportOptions) error {
-	panic("not implemented")
+	return s.runExport(ctx, opts)
+}
+
+// ExportAnswer は指定 answerID の問題を md ファイルに書き出す。
+func (s *Service) ExportAnswer(ctx context.Context, answerID int64, outputDir string) (string, error) {
+	return s.exportAnswer(ctx, answerID, outputDir)
 }
 
 // RetryGrading は grade_status="failed_retryable" の回答を再採点する。
-// TODO: core/grading.go で実装する。
-func (s *Service) RetryGrading(ctx context.Context) error {
-	panic("not implemented")
+func (s *Service) RetryGrading(ctx context.Context) (int, error) {
+	return s.retryGrading(ctx)
+}
+
+// ListSaved は保存済みの回答と問題一覧を返す。
+func (s *Service) ListSaved() ([]SavedItem, error) {
+	return s.listSaved()
+}
+
+// SavedItem は `osarai list --saved` 用のデータ。
+type SavedItem struct {
+	AnswerID   int64
+	Title      string
+	Category   string
+	ExportPath string
+	CreatedAt  string
 }

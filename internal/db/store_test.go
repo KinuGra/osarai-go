@@ -316,7 +316,7 @@ func TestAnswerMarkSavedAndFindSaved(t *testing.T) {
 		t.Errorf("initial saved count = %d, want 0", len(saved))
 	}
 
-	if err := store.MarkSaved(id); err != nil {
+	if err := store.MarkSaved(id, ""); err != nil {
 		t.Fatalf("MarkSaved: %v", err)
 	}
 
@@ -336,7 +336,7 @@ func TestAnswerUpdateGradeStatus(t *testing.T) {
 	id, _, _, _ := makeAnswer(t, db)
 	store := NewAnswerStore(db)
 
-	if err := store.UpdateGradeStatus(id, "failed_retryable"); err != nil {
+	if err := store.UpdateGradeStatus(id, "failed_retryable", nil); err != nil {
 		t.Fatalf("UpdateGradeStatus: %v", err)
 	}
 
@@ -361,7 +361,7 @@ func TestAnswerFindRetryable(t *testing.T) {
 	}
 
 	// gradedID を failed_retryable に変更 → 1 件
-	store.UpdateGradeStatus(gradedID, "failed_retryable") //nolint:errcheck
+	store.UpdateGradeStatus(gradedID, "failed_retryable", nil) //nolint:errcheck
 	got, _ = store.FindRetryable()
 	if len(got) != 1 || got[0].ID != gradedID {
 		t.Errorf("want [%d], got %+v", gradedID, got)
@@ -369,7 +369,7 @@ func TestAnswerFindRetryable(t *testing.T) {
 
 	// local_only は対象外（再採点不要）
 	id2, _, _, _ := makeAnswer(t, db)
-	store.UpdateGradeStatus(id2, "local_only") //nolint:errcheck
+	store.UpdateGradeStatus(id2, "local_only", nil) //nolint:errcheck
 	got, _ = store.FindRetryable()
 	if len(got) != 1 {
 		t.Errorf("local_only should not be retryable, got %d", len(got))

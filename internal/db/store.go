@@ -97,6 +97,7 @@ type RepositoryStore interface {
 
 type CommitStore interface {
 	Create(commit *Commit) error
+	FindByHash(repoID int64, hash string) (*Commit, error)
 	FindUnreviewed(repoID int64) ([]Commit, error)
 	MarkReviewed(id int64) error
 }
@@ -108,20 +109,24 @@ type SessionStore interface {
 
 type QuestionStore interface {
 	Save(question *Question) error
+	FindByID(id int64) (*Question, error)
 	FindBySessionID(sessionID int64) ([]Question, error)
+	FindByCommitID(commitID int64) ([]Question, error)
 }
 
 type AnswerStore interface {
 	Save(answer *Answer) error
+	FindByID(id int64) (*Answer, error)
 	FindByQuestionID(questionID int64) (*Answer, error)
 	FindRetryable() ([]Answer, error)
-	UpdateGradeStatus(id int64, status string) error
-	MarkSaved(id int64) error
+	UpdateGradeStatus(id int64, status string, explanation *string) error
+	MarkSaved(id int64, exportPath string) error
 	FindSaved() ([]Answer, error)
 }
 
 type ReviewStore interface {
 	Create(review *Review) error
+	FindByAnswerID(answerID int64) (*Review, error)
 	FindDue(now time.Time) ([]Review, error)
 	Update(review *Review) error
 }
