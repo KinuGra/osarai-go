@@ -11,10 +11,6 @@ import (
 	"github.com/KinuGra/osarai-go/internal/tui/quiz"
 )
 
-// stubService は core.Service の代わりに使うテスト用スタブ。
-// GradeAnswer を呼ばれても何もしない（採点は非同期 Cmd なので直接呼ばれない）。
-type stubService struct{}
-
 func makeTestApp() *App {
 	questions := []core.CheckQuestion{
 		{

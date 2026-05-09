@@ -129,11 +129,11 @@ func (m Model) updateChoice(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// ② 問題文のスクロール（Ctrl+U/D、または pgup/pgdn）
 	case "ctrl+u", "pgup":
 		if m.qvpReady {
-			m.qvp.HalfViewUp()
+			m.qvp.HalfPageUp()
 		}
 	case "ctrl+d", "pgdn":
 		if m.qvpReady {
-			m.qvp.HalfViewDown()
+			m.qvp.HalfPageDown()
 		}
 	case "enter", " ":
 		if len(choices) == 0 {
@@ -173,19 +173,19 @@ func (m Model) updateWritten(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// ② 記述式では ↑↓ で問題文をスクロール（textinput は ↑↓ を使わない）
 	case "up", "k":
 		if m.qvpReady {
-			m.qvp.LineUp(1)
+			m.qvp.ScrollUp(1)
 		}
 	case "down":
 		if m.qvpReady {
-			m.qvp.LineDown(1)
+			m.qvp.ScrollDown(1)
 		}
 	case "ctrl+u", "pgup":
 		if m.qvpReady {
-			m.qvp.HalfViewUp()
+			m.qvp.HalfPageUp()
 		}
 	case "ctrl+d", "pgdn":
 		if m.qvpReady {
-			m.qvp.HalfViewDown()
+			m.qvp.HalfPageDown()
 		}
 	case "ctrl+c":
 		return m, tea.Quit

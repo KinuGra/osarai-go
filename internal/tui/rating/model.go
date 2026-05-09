@@ -88,7 +88,7 @@ func (m Model) View() string {
 	for i, opt := range options {
 		prefix := "  "
 		label := opt.label
-		desc := opt.description
+		var desc string
 
 		if i == m.cursor {
 			prefix = styles.Highlight.Render(" ❯")

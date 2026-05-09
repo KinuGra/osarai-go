@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/KinuGra/osarai-go/internal/apperror"
@@ -93,6 +94,15 @@ type geminiErrorResponse struct {
 	} `json:"error"`
 }
 
+// thinkingConfig は thinking 対応モデル（gemini-2.5-* / *-thinking）のみ
+// ThinkingBudget: 0 を返し、非対応モデルでは nil を返す（omitempty で JSON から除外される）。
+func (p *GeminiProvider) thinkingConfig() *geminiThinkingConfig {
+	if strings.Contains(p.model, "2.5") || strings.Contains(p.model, "thinking") {
+		return &geminiThinkingConfig{ThinkingBudget: 0}
+	}
+	return nil
+}
+
 // Complete は Gemini API にプロンプトを送り、テキストレスポンスを返す。
 func (p *GeminiProvider) Complete(ctx context.Context, req CompletionRequest) (CompletionResponse, error) {
 	body, err := p.buildRequestBody(req)
@@ -142,7 +152,7 @@ func (p *GeminiProvider) buildRequestBody(req CompletionRequest) ([]byte, error)
 		GenerationConfig: geminiGenerationConfig{
 			Temperature:     req.Temperature,
 			MaxOutputTokens: maxTokens,
-			ThinkingConfig:  &geminiThinkingConfig{ThinkingBudget: 0},
+			ThinkingConfig:  p.thinkingConfig(),
 		},
 	}
 
