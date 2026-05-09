@@ -12,10 +12,12 @@ import (
 
 // GradeAnswerRequest は TUI → core への採点リクエスト。
 type GradeAnswerRequest struct {
-	DBQuestionID int64
-	Question     ai.Question
-	UserAnswer   string
-	DiffContext  string
+	DBQuestionID     int64
+	Question         ai.Question
+	UserAnswer       string
+	DiffContext      string
+	ExistingAnswerID int64          // recall SM-2 アイテムの既存回答 ID
+	ExistingResult   *GradeAnswerResult // recall SM-2 アイテムの既存採点結果
 }
 
 // GradeAnswerResult は採点結果と DB に保存された Answer の ID。
