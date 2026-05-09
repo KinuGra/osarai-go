@@ -11,7 +11,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:           "osarai",
-	Short:         "おさらいGo — git diff から AI 問題を生成し、SM-2 で復習管理する TUI ツール",
+	Short:         "おさらいGo — AI 生成コードの\"わかったつもり\"をなくし、知識として定着させるターミナル TUI アプリ",
 	SilenceErrors: true,
 }
 
