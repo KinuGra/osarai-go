@@ -1,0 +1,27 @@
+# {{.Title}}
+
+**カテゴリ:** {{.Category}}
+**日付:** {{.CreatedAt}}
+**理解度:** {{.SelfRating}}{{if .ScoreLabel}} | **AI 採点:** {{.ScoreLabel}}{{end}}
+
+---
+
+## 問題
+
+{{.Body}}
+
+{{if .Choices}}### 選択肢
+
+{{range .Choices}}- {{.}}
+{{end}}
+{{end}}
+
+**あなたの回答:** {{.UserAnswer}} {{if .IsCorrect}}✅ 正解{{else}}❌ 不正解{{end}}
+
+{{if ne .CorrectAnswer ""}}**正解:** {{.CorrectAnswer}}
+
+{{end}}---
+
+## 解説
+
+{{.Explanation}}
