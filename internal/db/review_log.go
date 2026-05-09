@@ -40,7 +40,7 @@ func (s *reviewLogStore) FindByAnswerID(answerID int64) ([]ReviewLog, error) {
 	if err != nil {
 		return nil, fmt.Errorf("review log find: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var logs []ReviewLog
 	for rows.Next() {

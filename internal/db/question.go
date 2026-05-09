@@ -30,6 +30,82 @@ func (s *questionStore) Save(question *Question) error {
 	return nil
 }
 
+func (s *questionStore) FindByID(id int64) (*Question, error) {
+	row := s.db.QueryRow(
+		`SELECT id, session_id, commit_id, title, category, question_type,
+		        body, choices, correct_answer, explanation, diff_context, sort_order, created_at
+		 FROM questions WHERE id = ?`, id,
+	)
+	var q Question
+	var commitID sql.NullInt64
+	var explanation, diffContext sql.NullString
+	var createdAt []byte
+	if err := row.Scan(
+		&q.ID, &q.SessionID, &commitID, &q.Title, &q.Category, &q.QuestionType,
+		&q.Body, &q.Choices, &q.CorrectAnswer, &explanation, &diffContext, &q.SortOrder, &createdAt,
+	); err != nil {
+		return nil, fmt.Errorf("question find by id: %w", err)
+	}
+	if commitID.Valid {
+		q.CommitID = &commitID.Int64
+	}
+	if explanation.Valid {
+		q.Explanation = &explanation.String
+	}
+	if diffContext.Valid {
+		q.DiffContext = &diffContext.String
+	}
+	t, err := parseTime(createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("question parse created_at: %w", err)
+	}
+	q.CreatedAt = t
+	return &q, nil
+}
+
+func (s *questionStore) FindByCommitID(commitID int64) ([]Question, error) {
+	rows, err := s.db.Query(
+		`SELECT id, session_id, commit_id, title, category, question_type,
+		        body, choices, correct_answer, explanation, diff_context, sort_order, created_at
+		 FROM questions WHERE commit_id = ? ORDER BY sort_order`,
+		commitID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("question find by commit: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var qs []Question
+	for rows.Next() {
+		var q Question
+		var cid sql.NullInt64
+		var explanation, diffContext sql.NullString
+		var createdAt []byte
+		if err := rows.Scan(
+			&q.ID, &q.SessionID, &cid, &q.Title, &q.Category, &q.QuestionType,
+			&q.Body, &q.Choices, &q.CorrectAnswer, &explanation, &diffContext, &q.SortOrder, &createdAt,
+		); err != nil {
+			return nil, fmt.Errorf("question scan: %w", err)
+		}
+		if cid.Valid {
+			q.CommitID = &cid.Int64
+		}
+		if explanation.Valid {
+			q.Explanation = &explanation.String
+		}
+		if diffContext.Valid {
+			q.DiffContext = &diffContext.String
+		}
+		t, err := parseTime(createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("question parse created_at: %w", err)
+		}
+		q.CreatedAt = t
+		qs = append(qs, q)
+	}
+	return qs, rows.Err()
+}
+
 func (s *questionStore) FindBySessionID(sessionID int64) ([]Question, error) {
 	rows, err := s.db.Query(
 		`SELECT id, session_id, commit_id, title, category, question_type,
@@ -40,7 +116,7 @@ func (s *questionStore) FindBySessionID(sessionID int64) ([]Question, error) {
 	if err != nil {
 		return nil, fmt.Errorf("question find by session: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var qs []Question
 	for rows.Next() {

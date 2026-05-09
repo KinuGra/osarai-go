@@ -30,6 +30,15 @@ func (s *answerStore) Save(answer *Answer) error {
 	return nil
 }
 
+func (s *answerStore) FindByID(id int64) (*Answer, error) {
+	row := s.db.QueryRow(
+		`SELECT id, question_id, user_answer, is_correct, ai_score, ai_score_label,
+		        ai_explanation, grade_status, saved, export_path, created_at
+		 FROM answers WHERE id = ?`, id,
+	)
+	return scanAnswer(row)
+}
+
 func (s *answerStore) FindByQuestionID(questionID int64) (*Answer, error) {
 	row := s.db.QueryRow(
 		`SELECT id, question_id, user_answer, is_correct, ai_score, ai_score_label,
@@ -48,17 +57,23 @@ func (s *answerStore) FindRetryable() ([]Answer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("answer find retryable: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	return scanAnswers(rows)
 }
 
-func (s *answerStore) UpdateGradeStatus(id int64, status string) error {
-	_, err := s.db.Exec(`UPDATE answers SET grade_status = ? WHERE id = ?`, status, id)
+func (s *answerStore) UpdateGradeStatus(id int64, status string, explanation *string) error {
+	_, err := s.db.Exec(
+		`UPDATE answers SET grade_status = ?, ai_explanation = ? WHERE id = ?`,
+		status, explanation, id,
+	)
 	return err
 }
 
-func (s *answerStore) MarkSaved(id int64) error {
-	_, err := s.db.Exec(`UPDATE answers SET saved = 1 WHERE id = ?`, id)
+func (s *answerStore) MarkSaved(id int64, exportPath string) error {
+	_, err := s.db.Exec(
+		`UPDATE answers SET saved = 1, export_path = ? WHERE id = ?`,
+		exportPath, id,
+	)
 	return err
 }
 
@@ -71,7 +86,7 @@ func (s *answerStore) FindSaved() ([]Answer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("answer find saved: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	return scanAnswers(rows)
 }
 
