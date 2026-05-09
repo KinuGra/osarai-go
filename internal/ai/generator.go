@@ -74,7 +74,9 @@ var generateQuestionsTmpl = template.Must(
 const generateSystemPrompt = "あなたはソフトウェアエンジニアの教育専門家です。\n" +
 	"git diff を読み、開発者の理解度チェック問題を JSON 配列で生成します。\n" +
 	"返答は純粋な JSON 配列のみにしてください。コードブロック（```）、説明文、前置き、後書きは一切不要です。\n" +
-	"最初の文字は \"[\" でなければなりません。"
+	"最初の文字は \"[\" でなければなりません。\n" +
+	"JSON 文字列内でダブルクォートを使う場合は必ず \\\" とエスケープしてください。\n" +
+	"コード内の識別子はシングルクォート（'）またはバッククォート（`）で囲み、ダブルクォートは使わないでください。"
 
 // GenerateQuestions は diff から問題を生成する。
 // テンプレートを適用してプロンプトを構築し、LLM に投げて JSON をパースして返す。
@@ -105,7 +107,21 @@ func (g *Generator) GenerateQuestions(ctx context.Context, req GenerateRequest) 
 		return nil, apperror.ErrNoQuestionsGenerated
 	}
 
+	for i := range questions {
+		questions[i].Category = normalizeCategory(questions[i].Category)
+	}
+
 	return questions, nil
+}
+
+// normalizeCategory は DB の CHECK 制約外のカテゴリを最も近い有効値に丸める。
+func normalizeCategory(cat QuestionCategory) QuestionCategory {
+	switch cat {
+	case QuestionCategoryDesign, QuestionCategoryLanguage, QuestionCategoryFramework:
+		return cat
+	default:
+		return QuestionCategoryDesign
+	}
 }
 
 // cleanJSONResponse は LLM レスポンスから JSON 部分のみを抽出する。
