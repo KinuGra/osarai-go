@@ -71,6 +71,11 @@ func runCheck(_ *cobra.Command, args []string) error {
 		opts.FilePath = args[0]
 	}
 
+	// 4.5 failed_retryable バナー
+	if n, err := svc.CountRetryable(); err == nil && n > 0 {
+		fmt.Fprintf(os.Stderr, "⚠️  採点失敗が %d 件あります。`osarai retry-grading` で再採点できます。\n\n", n)
+	}
+
 	// 5. 問題生成（TUI 外で行い、ロード中メッセージを表示）
 	fmt.Println("🔍 差分を取得して問題を生成中...")
 	questions, err := svc.RunCheck(ctx, opts)
