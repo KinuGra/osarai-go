@@ -108,18 +108,14 @@ func (g *Generator) GenerateQuestions(ctx context.Context, req GenerateRequest) 
 	return questions, nil
 }
 
-// cleanJSONResponse は LLM レスポンスからコードブロックや余分な空白を取り除く。
+// cleanJSONResponse は LLM レスポンスから JSON 部分のみを抽出する。
+// Markdown コードブロック・改行の有無・前後の説明文に依存しないよう、
+// 最初の '[' or '{' から最後の '}' or ']' までを切り出す方式を採用する。
 func cleanJSONResponse(s string) string {
-	s = strings.TrimSpace(s)
-	// ```json ... ``` or ``` ... ``` を除去
-	if strings.HasPrefix(s, "```") {
-		// 最初の改行まで読み飛ばす
-		idx := strings.Index(s, "\n")
-		if idx >= 0 {
-			s = s[idx+1:]
-		}
-		// 末尾の ``` を除去
-		s = strings.TrimSuffix(strings.TrimSpace(s), "```")
+	start := strings.IndexAny(s, "[{")
+	end := strings.LastIndexAny(s, "}]")
+	if start >= 0 && end >= 0 && start < end {
+		return s[start : end+1]
 	}
 	return strings.TrimSpace(s)
 }

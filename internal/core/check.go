@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/KinuGra/osarai-go/internal/ai"
@@ -76,7 +78,7 @@ func (s *Service) runCheck(ctx context.Context, opts CheckOptions) ([]CheckQuest
 	// 5. AI で問題を生成
 	aiQuestions, err := s.generator.GenerateQuestions(ctx, ai.GenerateRequest{
 		Diff:     diff.Body,
-		Language: "Go", // TODO: 言語を diff から自動検出
+		Language: detectLanguage(diff.Body),
 		FilePath: opts.FilePath,
 	})
 	if err != nil {
@@ -128,6 +130,52 @@ func (s *Service) runCheck(ctx context.Context, opts CheckOptions) ([]CheckQuest
 	}
 
 	return result, nil
+}
+
+// detectLanguage は diff テキストの "diff --git" 行からファイル拡張子を集計し、
+// 最も多く登場する言語名を返す。判定できない場合は "Unknown" を返す。
+func detectLanguage(diffBody string) string {
+	extToLang := map[string]string{
+		".go":   "Go",
+		".ts":   "TypeScript",
+		".tsx":  "TypeScript",
+		".js":   "JavaScript",
+		".jsx":  "JavaScript",
+		".py":   "Python",
+		".rs":   "Rust",
+		".java": "Java",
+		".rb":   "Ruby",
+		".kt":   "Kotlin",
+		".swift": "Swift",
+		".cs":   "C#",
+		".cpp":  "C++",
+		".c":    "C",
+		".md":   "Markdown",
+	}
+
+	counts := map[string]int{}
+	for _, line := range strings.Split(diffBody, "\n") {
+		if !strings.HasPrefix(line, "diff --git ") {
+			continue
+		}
+		// "diff --git a/path/to/file.go b/path/to/file.go" → "a/path/to/file.go"
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		ext := filepath.Ext(fields[2])
+		if lang, ok := extToLang[ext]; ok {
+			counts[lang]++
+		}
+	}
+
+	best, bestN := "Unknown", 0
+	for lang, n := range counts {
+		if n > bestN {
+			best, bestN = lang, n
+		}
+	}
+	return best
 }
 
 // truncateDiff は diff テキストを maxRunes 文字に切り詰める。
