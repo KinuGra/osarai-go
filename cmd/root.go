@@ -13,6 +13,7 @@ var rootCmd = &cobra.Command{
 	Use:           "osarai",
 	Short:         "おさらいGo — AI 生成コードの\"わかったつもり\"をなくし、知識として定着させるターミナル TUI アプリ",
 	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 // Execute はルートコマンドを実行する。main から呼ぶ。
@@ -25,6 +26,7 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	rootCmd.CompletionOptions.HiddenDefaultCmd = true
 
 	rootCmd.AddCommand(
 		checkCmd,

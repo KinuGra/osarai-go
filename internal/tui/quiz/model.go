@@ -206,12 +206,10 @@ func (m Model) View() string {
 	if q.Type == ai.QuestionTypeWritten {
 		typeLabel = "記述式"
 	}
-	header := fmt.Sprintf("Q%d/%d  %s  %s",
-		m.current, m.total,
-		styles.Muted.Render("["+string(q.Category)+"]"),
-		styles.Muted.Render(typeLabel),
-	)
-	sb.WriteString(styles.Title.Render(header))
+	header := styles.Title.Render(fmt.Sprintf("Q%d/%d", m.current, m.total)) +
+		"  " + styles.Muted.Render("["+string(q.Category)+"]") +
+		"  " + styles.Muted.Render(typeLabel)
+	sb.WriteString(header)
 	sb.WriteString("\n\n")
 
 	// ── 問題文（viewport or フォールバック）──
